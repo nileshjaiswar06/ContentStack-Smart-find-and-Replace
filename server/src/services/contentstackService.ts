@@ -36,6 +36,7 @@ interface ContentstackResponse<T> {
  * @returns A promise that resolves to the fetched entries
  * @throws Will throw an error if the request fails or if required environment variables are missing
  */
+
 export async function fetchEntriesOfContentType<T = any>(contentTypeUid: string): Promise<ContentstackResponse<T>> {
   if (!contentTypeUid) {
     throw new Error("Content Type UID is required");
@@ -79,6 +80,7 @@ export async function updateEntry(contentTypeUid: string, entryUid: string, payl
   const headers = {
     api_key: STACK_API_KEY,
     authorization: MANAGEMENT_TOKEN,
+    'Content-Type': 'application/json'
   };
   const r = await axios.put(url, payload, { headers });
   return r.data;
