@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { fetchEntriesOfContentType } from "../services/contentstackService.js";
+import { changeCount } from "../utils/diffPreview.js";
 
 const router = Router();
 
@@ -9,6 +10,37 @@ router.get("/", (req: Request, res: Response) => {
     ok: false, 
     error: "Content Type UID is required" 
   });
+});
+
+// Preview changes before applying them
+router.post("/preview", async (req: Request, res: Response) => {
+  try {
+    const { before, after } = req.body;
+
+    if (!before || !after) {
+      return res.status(400).json({
+        ok: false,
+        error: "Both 'before' and 'after' objects are required"
+      });
+    }
+
+    const summary = changeCount(before, after);
+    const totalChanges = summary.reduce((sum, { count }) => sum + count, 0);
+
+    return res.json({
+      ok: true,
+      before,
+      after,
+      changes: summary,
+      totalChanges
+    });
+  } catch (e: any) {
+    console.error("Error in preview endpoint:", e);
+    return res.status(500).json({ 
+      ok: false, 
+      error: e.message || "Failed to generate preview" 
+    });
+  }
 });
 
 router.get("/:contentTypeUid", async (req: Request, res: Response) => {
