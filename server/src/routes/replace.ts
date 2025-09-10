@@ -110,7 +110,7 @@ router.post("/preview", async (req: Request, res: Response) => {
     });
 
     // Apply replacements
-    const after = deepReplace(cloneDeep(before), rx, rule.replace);
+    const { result: after, replacedCount } = deepReplace(cloneDeep(before), rx, rule.replace);
     
     // Calculate changes
     const changes = changeCount(before, after);
@@ -126,6 +126,7 @@ router.post("/preview", async (req: Request, res: Response) => {
       totalChanges,
       before,
       after,
+      replacedCount,
       timestamp: new Date().toISOString()
     });
     
@@ -193,7 +194,7 @@ router.put("/apply", async (req: Request, res: Response) => {
     });
 
     // 3. Apply replacements
-    const after = deepReplace(cloneDeep(before), rx, rule.replace);
+    const { result: after, replacedCount } = deepReplace(cloneDeep(before), rx, rule.replace);
     
     // 4. Calculate changes for logging
     const changes = changeCount(before, after);
@@ -230,6 +231,7 @@ router.put("/apply", async (req: Request, res: Response) => {
         _version: updated._version,
         updated_at: updated.updated_at
       },
+      replacedCount,
       timestamp: new Date().toISOString()
     });
     
