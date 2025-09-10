@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import cors from "cors";
 import routes from "./routes/replace.js";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.js";
+import { requestLoggerMiddleware, helmetMiddleware, readLimiter, writeLimiter } from "./middlewares/requestSecurity.js";
 
 // Load environment variables
 dotenv.config();
@@ -23,13 +24,21 @@ app.use(cors({
 }));
 
 // Middleware
-app.use(express.json({ limit: '10mb' }));
+requestLoggerMiddleware(app);
+app.use(helmetMiddleware);
+app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Set port
 const PORT = process.env.SERVER_PORT || 3001;
 
 // Routes
+// Apply read/write rate limiters: allow more GETs, stricter on writes
+app.use('/api', (req, res, next) => {
+  if (req.method === 'GET') return readLimiter(req, res, next);
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) return writeLimiter(req, res, next);
+  return next();
+});
 app.use("/api", routes);
 app.get("/health", (req, res) => res.json({ ok: true, message: "Server healthy" }));
 
@@ -39,7 +48,7 @@ app.use(errorHandler);
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`Server running at http://localhost:${PORT} in ${process.env.NODE_ENV} mode`);
 });
 
 // Handle unhandled promise rejections
