@@ -23,7 +23,7 @@ app.use(cors({
 }));
 
 // Middleware
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Set port
@@ -45,5 +45,4 @@ app.listen(PORT, () => {
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err: Error) => {
   console.error('Unhandled Rejection:', err);
-  process.exit(1);
 });
