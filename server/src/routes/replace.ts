@@ -9,18 +9,12 @@ import cloneDeep from "lodash.clonedeep";
 
 const router = Router();
 
-// Health check endpoint
-router.get("/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
-});
-
 // Root endpoint with documentation
 router.get("/", (_req, res) => {
   res.status(400).json({
     ok: false,
     error: "Invalid endpoint",
     endpoints: [
-      "GET    /health - Service health check",
       "GET    /:contentTypeUid - List entries of a content type",
       "POST   /preview - Preview changes before applying",
       "PUT    /apply - Apply changes to an entry",
