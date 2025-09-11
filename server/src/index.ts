@@ -2,6 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import routes from "./routes/replace.js";
+import nerRoutes from "./routes/ner.js";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.js";
 import { requestLoggerMiddleware, helmetMiddleware, readLimiter, writeLimiter } from "./middlewares/requestSecurity.js";
 
@@ -26,7 +27,7 @@ app.use(cors({
 // Middleware
 requestLoggerMiddleware(app);
 app.use(helmetMiddleware);
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '10mb' })); // Reduced from 50mb for security
 app.use(express.urlencoded({ extended: true }));
 
 // Set port
@@ -40,6 +41,7 @@ app.use('/api', (req, res, next) => {
   return next();
 });
 app.use("/api", routes);
+app.use("/api/ner", nerRoutes); // NER routes with their own rate limiting
 app.get("/health", (req, res) => res.json({ ok: true, message: "Server healthy" }));
 
 // Error handling middleware (must be last)

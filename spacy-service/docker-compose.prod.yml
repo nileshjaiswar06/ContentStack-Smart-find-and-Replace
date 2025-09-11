@@ -1,0 +1,6 @@
+# Production override - removes external port exposure for security
+services:
+  spacy-ner:
+    ports: [] # Remove external port exposure
+    # In production, ensure your Node.js server connects to spacy-ner:8000 within the Docker network
+    # Use: SPACY_SERVICE_URL=http://spacy-ner:8000

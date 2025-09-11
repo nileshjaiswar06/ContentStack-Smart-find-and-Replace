@@ -4,6 +4,7 @@ import { buildRegex } from "../utils/text.js";
 import { deepReplace } from "../utils/deepReplace.js";
 import { changeCount } from "../utils/diffPreview.js";
 import { logger } from "../utils/logger.js";
+import { extractEntities } from "../services/nerProxy.js";
 import type { ReplacementRule } from "../types.js";
 import cloneDeep from "lodash.clonedeep";
 
@@ -93,9 +94,9 @@ router.post("/preview", async (req: Request, res: Response) => {
   const { contentTypeUid, entryUid } = target;
   
   try {
-    // Fetch the latest draft
-    console.log(`[Preview] Fetching draft for ${contentTypeUid}/${entryUid}`);
-    const before = await fetchEntryDraft(contentTypeUid, entryUid);
+  // Fetch the latest draft
+  logger.info(`[Preview] Fetching draft for ${contentTypeUid}/${entryUid}`);
+  const before = await fetchEntryDraft(contentTypeUid, entryUid);
     
     // Build regex from rule
     const rx = buildRegex(rule.find, rule.mode ?? "literal", {
@@ -110,7 +111,19 @@ router.post("/preview", async (req: Request, res: Response) => {
     const changes = changeCount(before, after);
     const totalChanges = changes.reduce((sum, { count }) => sum + count, 0);
     
-    console.log(`[Preview] Found ${totalChanges} changes in ${contentTypeUid}/${entryUid}`);
+    logger.info(`[Preview] Found ${totalChanges} changes in ${contentTypeUid}/${entryUid}`);
+
+    // Optionally enrich preview with NER suggestions
+    const enableNer = process.env.ENABLE_NER === 'true';
+    let ner: any = undefined;
+    if (enableNer) {
+      try {
+        const text = JSON.stringify(after); // crude: run NER on serialized entry; adapt as needed
+        ner = await extractEntities(text);
+      } catch (e: any) {
+        logger.warn(`NER enrichment failed: ${e.message || e}`);
+      }
+    }
     
     return res.json({ 
       ok: true, 
@@ -125,7 +138,7 @@ router.post("/preview", async (req: Request, res: Response) => {
     });
     
   } catch (error: any) {
-    console.error(`[Preview] Error processing ${contentTypeUid}/${entryUid}:`, error);
+  logger.error(`[Preview] Error processing ${contentTypeUid}/${entryUid}: ${error?.message || error}`);
     
     const status = error.response?.status || 500;
     const message = error.response?.data?.error_message || 
@@ -175,11 +188,11 @@ router.put("/apply", async (req: Request, res: Response) => {
   const { contentTypeUid, entryUid } = target;
   
   try {
-    console.log(`[Apply] Starting update for ${contentTypeUid}/${entryUid}`);
+  logger.info(`[Apply] Starting update for ${contentTypeUid}/${entryUid}`);
     
     // 1. Fetch the latest draft
-    console.log(`[Apply] Fetching draft for ${contentTypeUid}/${entryUid}`);
-    const before = await fetchEntryDraft(contentTypeUid, entryUid);
+  logger.info(`[Apply] Fetching draft for ${contentTypeUid}/${entryUid}`);
+  const before = await fetchEntryDraft(contentTypeUid, entryUid);
     
     // 2. Build regex from rule
     const rx = buildRegex(rule.find, rule.mode ?? "literal", {
@@ -195,7 +208,7 @@ router.put("/apply", async (req: Request, res: Response) => {
     const totalChanges = changes.reduce((sum, { count }) => sum + count, 0);
     
     if (totalChanges === 0) {
-      console.log(`[Apply] No changes detected for ${contentTypeUid}/${entryUid}`);
+    logger.info(`[Apply] No changes detected for ${contentTypeUid}/${entryUid}`);
       return res.json({ 
         ok: true, 
         entryUid,
@@ -206,13 +219,13 @@ router.put("/apply", async (req: Request, res: Response) => {
       });
     }
     
-    console.log(`[Apply] Found ${totalChanges} changes in ${contentTypeUid}/${entryUid}`);
+  logger.info(`[Apply] Found ${totalChanges} changes in ${contentTypeUid}/${entryUid}`);
     
     // 5. Update the entry
-    console.log(`[Apply] Updating entry ${contentTypeUid}/${entryUid}`);
+  logger.info(`[Apply] Updating entry ${contentTypeUid}/${entryUid}`);
     const updated = await updateEntry(contentTypeUid, entryUid, after);
     
-    console.log(`[Apply] Successfully updated ${contentTypeUid}/${entryUid}`);
+  logger.info(`[Apply] Successfully updated ${contentTypeUid}/${entryUid}`);
     
     return res.json({ 
       ok: true, 
@@ -230,7 +243,7 @@ router.put("/apply", async (req: Request, res: Response) => {
     });
     
   } catch (error: any) {
-    console.error(`[Apply] Error updating ${contentTypeUid}/${entryUid}:`, error);
+  logger.error(`[Apply] Error updating ${contentTypeUid}/${entryUid}: ${error?.message || error}`);
     
     const status = error.response?.status || 500;
     const message = error.response?.data?.error_message || 

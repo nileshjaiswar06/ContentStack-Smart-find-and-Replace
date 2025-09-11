@@ -5,13 +5,17 @@ High-performance Named Entity Recognition with confidence scores and entity span
 
 import spacy
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import logging
 import time
 from contextlib import asynccontextmanager
+
+# Prometheus metrics
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -20,6 +24,15 @@ logger = logging.getLogger(__name__)
 # Global model storage
 models = {}
 
+# Prometheus metrics
+request_count = Counter('spacy_requests_total', 'Total NER requests', ['method', 'endpoint', 'status'])
+request_duration = Histogram('spacy_request_duration_seconds', 'Request duration', ['method', 'endpoint'])
+entities_extracted = Counter('spacy_entities_extracted_total', 'Total entities extracted', ['model', 'label'])
+text_length_processed = Histogram('spacy_text_length_chars', 'Length of processed text', ['model'])
+active_requests = Gauge('spacy_active_requests', 'Currently active requests')
+model_load_time = Gauge('spacy_model_load_time_seconds', 'Time taken to load models', ['model'])
+circuit_breaker_state = Gauge('spacy_circuit_breaker_failures', 'Circuit breaker failure count')
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load models on startup"""
@@ -27,15 +40,21 @@ async def lifespan(app: FastAPI):
     
     # Load both speed and accuracy models
     try:
+        start_time = time.time()
         models['en_core_web_sm'] = spacy.load("en_core_web_sm")
-        logger.info("✓ Loaded en_core_web_sm (fast)")
+        load_time = time.time() - start_time
+        model_load_time.labels(model='en_core_web_sm').set(load_time)
+        logger.info(f"Loaded en_core_web_sm (fast) in {load_time:.2f}s")
     except OSError:
         logger.warning("en_core_web_sm not found. Install with: python -m spacy download en_core_web_sm")
         models['en_core_web_sm'] = None
     
     try:
+        start_time = time.time()
         models['en_core_web_trf'] = spacy.load("en_core_web_trf")
-        logger.info("✓ Loaded en_core_web_trf (accurate)")
+        load_time = time.time() - start_time
+        model_load_time.labels(model='en_core_web_trf').set(load_time)
+        logger.info(f"Loaded en_core_web_trf (accurate) in {load_time:.2f}s")
     except OSError:
         logger.warning("en_core_web_trf not found. Install with: python -m spacy download en_core_web_trf")
         models['en_core_web_trf'] = None
@@ -57,6 +76,34 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Metrics middleware
+@app.middleware("http")
+async def metrics_middleware(request: Request, call_next):
+    """Track request metrics"""
+    start_time = time.time()
+    active_requests.inc()
+    
+    # Get endpoint and method for labeling
+    endpoint = request.url.path
+    method = request.method
+    
+    try:
+        response = await call_next(request)
+        status = str(response.status_code)
+        
+        # Record metrics
+        request_count.labels(method=method, endpoint=endpoint, status=status).inc()
+        request_duration.labels(method=method, endpoint=endpoint).observe(time.time() - start_time)
+        
+        return response
+    except Exception as e:
+        # Record failed requests
+        request_count.labels(method=method, endpoint=endpoint, status="500").inc()
+        request_duration.labels(method=method, endpoint=endpoint).observe(time.time() - start_time)
+        raise
+    finally:
+        active_requests.dec()
 
 # Configure CORS for local development and configured origins
 allowed = []
@@ -146,6 +193,12 @@ async def health_check():
         "timestamp": time.time()
     }
 
+# Prometheus metrics endpoint
+@app.get("/metrics", response_class=PlainTextResponse)
+async def get_metrics():
+    """Prometheus metrics endpoint"""
+    return generate_latest()
+
 # Single text NER endpoint
 @app.post("/ner", response_model=NERResponse)
 async def extract_entities(request: NERRequest):
@@ -179,6 +232,9 @@ async def extract_entities(request: NERRequest):
             if request.labels and ent.label_ not in request.labels:
                 continue
             
+            # Track entity extraction metrics
+            entities_extracted.labels(model=request.model, label=ent.label_).inc()
+            
             entities.append(Entity(
                 text=ent.text,
                 label=ent.label_,
@@ -186,6 +242,9 @@ async def extract_entities(request: NERRequest):
                 end=ent.end_char,
                 confidence=confidence
             ))
+        
+        # Track text length processed
+        text_length_processed.labels(model=request.model).observe(len(request.text))
         
         processing_time = (time.time() - start_time) * 1000
         
@@ -232,6 +291,9 @@ async def extract_entities_batch(request: BatchNERRequest):
                 if request.labels and ent.label_ not in request.labels:
                     continue
                 
+                # Track entity extraction metrics
+                entities_extracted.labels(model=request.model, label=ent.label_).inc()
+                
                 entities.append(Entity(
                     text=ent.text,
                     label=ent.label_,
@@ -239,6 +301,9 @@ async def extract_entities_batch(request: BatchNERRequest):
                     end=ent.end_char,
                     confidence=confidence
                 ))
+            
+            # Track text length processed
+            text_length_processed.labels(model=request.model).observe(len(request.texts[i]))
             
             results.append(NERResponse(
                 entities=entities,

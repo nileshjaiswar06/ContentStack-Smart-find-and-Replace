@@ -1,0 +1,5 @@
+# Development compose with published ports for local testing
+services:
+  spacy-ner:
+    ports:
+      - "8000:8000"
