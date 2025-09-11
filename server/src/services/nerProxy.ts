@@ -1,18 +1,16 @@
 import axios, { type AxiosInstance } from 'axios';
 import axiosRetry from 'axios-retry';
-import { logger } from '../utils/logger.js';
+import opossum from 'opossum';
+import pino from 'pino';
+import { randomUUID } from 'crypto';
+
+// pino's types can sometimes be incompatible with certain TS configs; cast to any to instantiate safely
+const log = (pino as any)({ level: process.env.LOG_LEVEL || 'info', base: { service: 'ner-proxy' } });
 
 const SPACY_URL = process.env.SPACY_SERVICE_URL || 'http://localhost:8000';
 const SPACY_API_KEY = process.env.SPACY_API_KEY || undefined;
 
 // Circuit breaker state
-let circuitBreakerState = {
-  isOpen: false,
-  failures: 0,
-  lastFailureTime: 0,
-  successCount: 0
-};
-
 const CIRCUIT_BREAKER_CONFIG = {
   failureThreshold: Number(process.env.NER_CIRCUIT_BREAKER_FAILURES || 5),
   recoveryTimeout: Number(process.env.NER_CIRCUIT_BREAKER_TIMEOUT || 30000), // 30 seconds
@@ -35,6 +33,13 @@ export type NerResponse = {
   entity_count: number;
 };
 
+export type NerHealth = {
+  healthy: boolean;
+  latency?: number;
+  error?: string;
+  details?: any;
+};
+
 // Create axios instance with retry configuration
 const nerAxios: AxiosInstance = axios.create({
   baseURL: SPACY_URL,
@@ -53,143 +58,113 @@ axiosRetry(nerAxios, {
            (error.response?.status === 429); // Rate limited
   },
   onRetry: (retryCount, error, requestConfig) => {
-    logger.warn(`NER request retry ${retryCount}: ${error.message}`, {
-      url: requestConfig.url,
-      method: requestConfig.method
-    });
+    log.warn({ retryCount, url: requestConfig.url, method: requestConfig.method }, 
+      `NER request retry: ${error?.message}`);
   }
 });
+// Use opossum for circuit breaker
+const breakerOptions = {
+  timeout: Number(process.env.NER_TIMEOUT_MS || 10000),
+  errorThresholdPercentage: Math.min(100, (Number(process.env.NER_CIRCUIT_BREAKER_FAILURES || 5) /  (Number(process.env.NER_CIRCUIT_BREAKER_FAILURES || 5) + 1)) * 100),
+  resetTimeout: Number(process.env.NER_CIRCUIT_BREAKER_TIMEOUT || 30000)
+};
 
-// Circuit breaker logic
-function checkCircuitBreaker(): void {
-  const now = Date.now();
-  
-  if (circuitBreakerState.isOpen) {
-    // Check if recovery timeout has passed
-    if (now - circuitBreakerState.lastFailureTime > CIRCUIT_BREAKER_CONFIG.recoveryTimeout) {
-      logger.info('Circuit breaker transitioning to half-open state');
-      circuitBreakerState.isOpen = false;
-      circuitBreakerState.successCount = 0;
-    } else {
-      throw new Error('Circuit breaker is open - spaCy service unavailable');
-    }
+// Define the action that sends to spaCy
+async function callSpaCy(opts: { path: string; payload?: any; requestId?: string }) {
+  const headers: Record<string, string> = {};
+  if (opts.requestId) headers['x-request-id'] = opts.requestId;
+
+  if (opts.path.endsWith('/health')) {
+    return nerAxios.get(opts.path, { headers });
+  }
+  return nerAxios.post(opts.path, opts.payload, { headers });
+}
+
+const breaker = new opossum((opts: { path: string; payload?: any; requestId?: string }) => callSpaCy(opts), breakerOptions);
+
+breaker.on('open', () => log.error('opossum: circuit opened'));
+breaker.on('halfOpen', () => log.warn('opossum: circuit half-open'));
+breaker.on('close', () => log.info('opossum: circuit closed'));
+breaker.on('fallback', () => log.warn('opossum: fallback invoked'));
+breaker.on('reject', () => log.warn('opossum: breaker rejected request'));
+breaker.on('timeout', () => log.warn('opossum: breaker timeout'));
+
+// Report circuit breaker state to the spaCy service so it can expose a Prometheus metric
+async function reportCircuitStateToSpaCy(event?: string) {
+  try {
+    const payload = {
+      event: event || 'state',
+      state: getCircuitBreakerState(),
+      timestamp: Date.now()
+    };
+
+    // fire-and-forget, but log failures
+    nerAxios.post('/metrics/report', payload).catch((err) => {
+      log.debug({ err: err instanceof Error ? err.message : String(err) }, 'Failed to report circuit state to spaCy');
+    });
+  } catch (err: any) {
+    log.debug({ err: err instanceof Error ? err.message : String(err) }, 'Error preparing circuit state report');
   }
 }
 
-function recordSuccess(): void {
-  circuitBreakerState.failures = 0;
-  circuitBreakerState.successCount++;
-  
-  // If we were in half-open state and got enough successes, fully close the circuit
-  if (circuitBreakerState.successCount >= CIRCUIT_BREAKER_CONFIG.successThreshold) {
-    logger.info('Circuit breaker closed - spaCy service healthy');
-    circuitBreakerState.successCount = 0;
-  }
-}
+// Hook reporting into breaker lifecycle events
+breaker.on('open', () => void reportCircuitStateToSpaCy('open'));
+breaker.on('halfOpen', () => void reportCircuitStateToSpaCy('halfOpen'));
+breaker.on('close', () => void reportCircuitStateToSpaCy('close'));
 
-function recordFailure(): void {
-  circuitBreakerState.failures++;
-  circuitBreakerState.lastFailureTime = Date.now();
-  circuitBreakerState.successCount = 0;
-  
-  if (circuitBreakerState.failures >= CIRCUIT_BREAKER_CONFIG.failureThreshold) {
-    circuitBreakerState.isOpen = true;
-    logger.error(`Circuit breaker opened after ${circuitBreakerState.failures} failures`);
-  }
-}
-
-export async function extractEntities(text: string, model = 'en_core_web_sm', min_confidence = 0.5): Promise<NerResponse> {
-  checkCircuitBreaker();
-  
+export async function extractEntities(text: string, model = 'en_core_web_sm', min_confidence = 0.5, requestId?: string): Promise<NerResponse> {
+  const rid = requestId ?? randomUUID();
   const startTime = Date.now();
   try {
-    const response = await nerAxios.post('/ner', { text, model, min_confidence });
+    log.debug({ requestId: rid, textLength: text.length, model }, 'Starting NER extraction call');
+    const response = await breaker.fire({ path: '/ner', payload: { text, model, min_confidence, request_id: rid }, requestId: rid });
     const data = response.data as NerResponse;
-    
-    recordSuccess();
-    
     const latency = Date.now() - startTime;
-    logger.debug(`NER extraction successful: ${data.entity_count} entities in ${latency}ms using ${data.model_used}`, {
-      textLength: text.length,
-      modelUsed: data.model_used,
-      latency,
-      entityCount: data.entity_count
-    });
-    
+    log.debug({ requestId: rid, textLength: text.length, modelUsed: data.model_used, latency, entityCount: data.entity_count }, 'NER extraction successful');
     return data;
-  } catch (error) {
-    recordFailure();
-    
+  } catch (error: any) {
     const latency = Date.now() - startTime;
-    logger.error(`NER extraction failed after ${latency}ms: ${error}`, {
-      textLength: text.length,
-      model,
-      latency,
-      error: error instanceof Error ? error.message : String(error)
-    });
-    
+    log.error({ requestId: rid, textLength: text.length, model, latency, error: error instanceof Error ? error.message : String(error) }, 'NER extraction failed');
     throw error;
   }
 }
 
-export async function extractEntitiesBatch(texts: string[], model = 'en_core_web_sm', min_confidence = 0.5) {
-  checkCircuitBreaker();
-  
+export async function extractEntitiesBatch(texts: string[], model = 'en_core_web_sm', min_confidence = 0.5, requestId?: string) {
+  const rid = requestId ?? randomUUID();
   const startTime = Date.now();
   try {
-    const response = await nerAxios.post('/ner/batch', { texts, model, min_confidence });
+    log.debug({ requestId: rid, batchSize: texts.length, model }, 'Starting NER batch extraction');
+    const response = await breaker.fire({ path: '/ner/batch', payload: { texts, model, min_confidence, request_id: rid }, requestId: rid });
     const data = response.data as { results: NerResponse[]; total_processing_time_ms: number; batch_size: number };
-    
-    recordSuccess();
-    
     const latency = Date.now() - startTime;
     const totalEntities = data.results.reduce((sum, result) => sum + (result.entity_count || 0), 0);
-    
-    logger.debug(`NER batch extraction successful: ${totalEntities} entities across ${data.batch_size} texts in ${latency}ms`, {
-      batchSize: data.batch_size,
-      totalEntities,
-      latency,
-      avgLatencyPerText: latency / data.batch_size
-    });
-    
+    log.debug({ requestId: rid, batchSize: data.batch_size, totalEntities, latency, avgLatencyPerText: latency / Math.max(1, data.batch_size) }, 'NER batch extraction successful');
     return data;
-  } catch (error) {
-    recordFailure();
-    
+  } catch (error: any) {
     const latency = Date.now() - startTime;
-    logger.error(`NER batch extraction failed after ${latency}ms: ${error}`, {
-      batchSize: texts.length,
-      model,
-      latency,
-      error: error instanceof Error ? error.message : String(error)
-    });
-    
+    log.error({ requestId: rid, batchSize: texts.length, model, latency, error: error instanceof Error ? error.message : String(error) }, 'NER batch extraction failed');
     throw error;
   }
 }
 
 // Health check function for monitoring
-export async function checkNerHealth(): Promise<{ healthy: boolean; latency?: number; error?: string }> {
+export async function checkNerHealth(): Promise<NerHealth> {
   try {
-    checkCircuitBreaker();
-    
     const startTime = Date.now();
-    await nerAxios.get('/health');
+    const res = await breaker.fire({ path: '/health' });
     const latency = Date.now() - startTime;
-    
-    return { healthy: true, latency };
-  } catch (error) {
-    return { 
-      healthy: false, 
-      error: error instanceof Error ? error.message : String(error)
-    };
+  return { healthy: true, latency, details: res.data };
+  } catch (error: any) {
+  return { healthy: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
 // Export circuit breaker state for monitoring
 export function getCircuitBreakerState() {
   return {
-    ...circuitBreakerState,
+    open: (breaker as any).opened || false,
+    pending: (breaker as any).pending || 0,
+    stats: (breaker as any).stats || {},
     config: CIRCUIT_BREAKER_CONFIG
   };
 }

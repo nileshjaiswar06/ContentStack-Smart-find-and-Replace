@@ -32,6 +32,9 @@ text_length_processed = Histogram('spacy_text_length_chars', 'Length of processe
 active_requests = Gauge('spacy_active_requests', 'Currently active requests')
 model_load_time = Gauge('spacy_model_load_time_seconds', 'Time taken to load models', ['model'])
 circuit_breaker_state = Gauge('spacy_circuit_breaker_failures', 'Circuit breaker failure count')
+# Additional circuit-breaker metrics reported from Node
+circuit_breaker_open = Gauge('spacy_circuit_breaker_open', 'Circuit breaker open state (1=open, 0=closed)')
+circuit_breaker_pending = Gauge('spacy_circuit_breaker_pending', 'Circuit breaker pending request count')
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -355,6 +358,51 @@ async def get_entity_labels():
             "CARDINAL": "Numerals that don't fall under another type"
         }
     }
+
+
+# Endpoint to accept circuit-breaker state reports from Node
+@app.post('/metrics/report')
+async def metrics_report(payload: Dict[str, Any], request: Request):
+    """Accepts a small JSON payload from the gateway/node service with circuit breaker state.
+    Expected shape: {"event": "open|close|state", "state": {"open": bool, "pending": int, "stats": {...}}, "timestamp": 123456789 }
+    This updates Prometheus gauges so /metrics exposes the CB state.
+    """
+    try:
+        event = payload.get('event') if isinstance(payload, dict) else None
+        state = payload.get('state') if isinstance(payload, dict) else None
+        request_id = payload.get('requestId') or payload.get('request_id') if isinstance(payload, dict) else None
+
+        logger.debug(f"Received metrics report event={event} request_id={request_id}")
+
+        if isinstance(state, dict):
+            # open/closed
+            if 'open' in state:
+                try:
+                    circuit_breaker_open.set(1 if state.get('open') else 0)
+                except Exception:
+                    pass
+
+            # pending
+            if 'pending' in state:
+                try:
+                    circuit_breaker_pending.set(int(state.get('pending') or 0))
+                except Exception:
+                    pass
+
+            # stats -> failures fallback
+            stats = state.get('stats') or {}
+            if isinstance(stats, dict):
+                failures = stats.get('failures') or stats.get('failureCount') or stats.get('failure_count') or stats.get('failure')
+                if failures is not None:
+                    try:
+                        circuit_breaker_state.set(float(failures))
+                    except Exception:
+                        pass
+
+        return {"ok": True}
+    except Exception as e:
+        logger.warning(f"Failed to process metrics report: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 if __name__ == "__main__":
     uvicorn.run(
