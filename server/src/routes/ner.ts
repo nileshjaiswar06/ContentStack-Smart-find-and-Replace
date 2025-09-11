@@ -1,5 +1,5 @@
 import { Router } from "express";
-import expressRateLimit from "express-rate-limit";
+import expressRateLimit, { ipKeyGenerator }  from "express-rate-limit";
 import { extractEntities, extractEntitiesBatch } from "../services/nerProxy.js";
 import { extractNamedEntitiesFromText } from "../services/nerService.js";
 import { logger } from "../utils/logger.js";
@@ -13,7 +13,15 @@ const nerRateLimiter = expressRateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { ok: false, error: "NER rate limit exceeded" },
-  keyGenerator: (req) => req.ip || 'unknown' // Rate limit by IP
+  keyGenerator: (req) => {
+    // ipKeyGenerator expects the ip string and optional ipv6Subnet; wrap to accept Request
+    const ip = (req as any).ip || 'unknown';
+    try {
+      return (ipKeyGenerator as any)(ip);
+    } catch (e) {
+      return String(ip);
+    }
+  }
 });
 
 // Apply rate limiting to all NER routes
