@@ -1,38 +1,45 @@
+version: '3.8'
+
 networks:
   contentstack-internal:
     driver: bridge
 
 services:
+  server:
+    build:
+      context: ./server
+    image: contentstack-server:local
+    depends_on:
+      - redis
+      - spacy-ner
+    environment:
+      - NODE_ENV=development
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - SPACY_SERVICE_URL=http://spacy-ner:8000
+    ports:
+      - "3001:3001"
+    networks:
+      - contentstack-internal
+    restart: unless-stopped
+
   spacy-ner:
     build:
-      context: .
+      context: ./spacy-service
       args:
         INSTALL_TRF: ${INSTALL_TRF:-false}
-    # For development - in production, remove ports and use internal network only
+    image: contentstack-spacy:local
     ports:
       - "8000:8000"
-    expose:
-      - "8000"
     networks:
       - contentstack-internal
     environment:
       - PYTHONUNBUFFERED=1
       - SPACY_API_KEY=${SPACY_API_KEY:-}
-    volumes: []
-    # For development, uncomment the lines below to mount the app file
-    # volumes:
-    #   - ./app.py:/app/app.py
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     networks:
       - contentstack-internal
     command: ["redis-server", "--save", "", "--appendonly", "no"]
-    
