@@ -13,7 +13,7 @@ services:
       - redis
       - spacy-ner
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=${NODE_ENV:-development}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - SPACY_SERVICE_URL=http://spacy-ner:8000
     ports:
@@ -28,8 +28,10 @@ services:
       args:
         INSTALL_TRF: ${INSTALL_TRF:-false}
     image: contentstack-spacy:local
-    ports:
-      - "8000:8000"
+    # Expose only to the internal Docker network. If you need host access for dev,
+    # set REDIS_URL/other envs and map ports in a dev-specific compose file.
+    expose:
+      - "8000"
     networks:
       - contentstack-internal
     environment:

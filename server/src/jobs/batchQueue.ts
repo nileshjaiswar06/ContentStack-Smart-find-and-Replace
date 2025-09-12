@@ -5,10 +5,44 @@ import { Worker, Queue } from "bullmq";
 import dotenv from "dotenv";
 dotenv.config();
 
-type JobRecord = { id: string; status: "queued" | "in_progress" | "completed" | "failed"; payload: any; progress: number; result?: any; error?: string; createdAt: string; updatedAt: string };
+type JobRecord = { id: string; status: "queued" | "in_progress" | "completed" | "failed"; payload: any; progress: number; result?: any; error?: string; entryErrors?: any[]; createdAt: string; updatedAt: string };
 
 const JOB_STORE_PATH = path.resolve(process.cwd(), "data", "jobs");
 await fs.mkdir(JOB_STORE_PATH, { recursive: true });
+
+// Cleanup old job files on startup to avoid unbounded disk growth
+async function cleanupOldJobs({ maxAgeDays = 7, maxFiles = 2000 } = {}) {
+  try {
+    const files = await fs.readdir(JOB_STORE_PATH);
+    const jobFiles = files.filter(f => f.endsWith('.json'));
+    // If too many files, sort by mtime and remove oldest beyond maxFiles
+    if (jobFiles.length > maxFiles) {
+      const items = await Promise.all(jobFiles.map(async (f) => {
+        const stat = await fs.stat(path.join(JOB_STORE_PATH, f));
+        return { f, mtime: stat.mtime.getTime() };
+      }));
+      items.sort((a, b) => a.mtime - b.mtime);
+      const toRemove = items.slice(0, items.length - maxFiles);
+      await Promise.all(toRemove.map(i => fs.unlink(path.join(JOB_STORE_PATH, i.f)).catch(() => {})));
+    }
+
+    // Remove files older than maxAgeDays
+    const threshold = Date.now() - (maxAgeDays * 24 * 60 * 60 * 1000);
+    await Promise.all(jobFiles.map(async (f) => {
+      try {
+        const stat = await fs.stat(path.join(JOB_STORE_PATH, f));
+        if (stat.mtime.getTime() < threshold) {
+          await fs.unlink(path.join(JOB_STORE_PATH, f));
+        }
+      } catch (e) { /* ignore individual errors */ }
+    }));
+  } catch (e) {
+    console.warn('Failed to cleanup old job files:', String((e as any)?.message ?? e));
+  }
+}
+
+// Run cleanup at startup (fire-and-forget)
+void cleanupOldJobs().catch(() => {});
 
 const useRedis = !!process.env.REDIS_URL && process.env.DISABLE_REDIS !== 'true';
 let bullQueue: any = null;
@@ -32,7 +66,8 @@ async function initializeRedis() {
     await connection.ping();
     
     bullQueue = new Queue("batch-updates", { connection });
-    jobWorker = new Worker("batch-updates", async job => {
+  const concurrency = Number(process.env.BATCH_WORKER_CONCURRENCY || process.env.BULLMQ_WORKER_CONCURRENCY || 1);
+  jobWorker = new Worker("batch-updates", async job => {
       const { jobId, payload } = job.data;
       
       try {
@@ -51,7 +86,7 @@ async function initializeRedis() {
         updateJobStatus(jobId, "failed", { error: error.message });
         throw error;
       }
-    }, { connection });
+  }, { connection, concurrency });
     
     redisInitialized = true;
     console.log('Redis queue initialized successfully');
@@ -61,6 +96,28 @@ async function initializeRedis() {
   }
 }
 
+// Graceful shutdown: close BullMQ connections when process exits
+async function gracefulShutdown() {
+  try {
+    console.log('Shutting down: closing job worker and queue if initialized');
+    if (jobWorker && typeof jobWorker.close === 'function') {
+      await jobWorker.close();
+      console.log('jobWorker closed');
+    }
+    if (bullQueue && typeof bullQueue.close === 'function') {
+      await bullQueue.close();
+      console.log('bullQueue closed');
+    }
+  } catch (e) {
+    console.warn('Error during graceful shutdown:', String((e as any)?.message ?? e));
+  } finally {
+    process.exit(0);
+  }
+}
+
+process.on('SIGINT', () => { void gracefulShutdown(); });
+process.on('SIGTERM', () => { void gracefulShutdown(); });
+
 // Helper functions for job management
 async function saveJobToDisk(job: JobRecord) {
   try {
@@ -69,7 +126,7 @@ async function saveJobToDisk(job: JobRecord) {
       JSON.stringify(job, null, 2)
     );
   } catch (error: any) {
-    console.error('Failed to save job to disk:', error.message);
+  console.error('Failed to save job to disk:', String(error?.message ?? error));
   }
 }
 
@@ -95,6 +152,21 @@ function updateJobStatus(jobId: string, status: JobRecord['status'], data: { res
 }
 
 export async function createBatchJob(payload: any) {
+  // Basic runtime payload validation to catch malformed requests early
+  function validatePayload(p: any) {
+    const errors: string[] = [];
+    if (!p) errors.push('payload missing');
+    if (!p.contentTypeUid || typeof p.contentTypeUid !== 'string') errors.push('contentTypeUid required');
+    if (!Array.isArray(p.entryUids) || p.entryUids.length === 0) errors.push('entryUids must be a non-empty array');
+    if (!p.rule || typeof p.rule !== 'object') errors.push('rule object required');
+    return { valid: errors.length === 0, errors };
+  }
+
+  const validation = validatePayload(payload);
+  if (!validation.valid) {
+    throw new Error(`Invalid payload: ${validation.errors.join(', ')}`);
+  }
+
   const id = uuidv4();
   const job: JobRecord = { 
     id, 
@@ -118,7 +190,7 @@ export async function createBatchJob(payload: any) {
       await bullQueue.add("apply", { jobId: id, payload });
       console.log('Job queued in Redis:', id);
     } catch (error: any) {
-      console.error('Failed to queue job in Redis, falling back to in-memory:', error.message);
+  console.error('Failed to queue job in Redis, falling back to in-memory:', String(error?.message ?? error));
       setImmediate(() => { void processInMemoryJob(id); });
     }
   } else {
@@ -154,8 +226,8 @@ async function processInMemoryJob(jobId: string) {
     });
     console.log('In-memory job completed:', jobId);
   } catch (err: any) {
-    updateJobStatus(jobId, "failed", { error: String(err?.message ?? err) });
-    console.error('In-memory job failed:', jobId, err.message);
+  updateJobStatus(jobId, "failed", { error: String(err?.message ?? err) });
+  console.error('In-memory job failed:', jobId, String(err ?? 'unknown error'));
   }
 }
 

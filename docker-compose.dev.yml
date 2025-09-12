@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: ./server
+    volumes:
+      - ./server:/usr/src/app:rw
+    environment:
+      - NODE_ENV=development
+    ports:
+      - "3001:3001"
+    depends_on:
+      - redis
+      - spacy-ner
+
+  spacy-ner:
+    build:
+      context: ./spacy-service
+      args:
+        INSTALL_TRF: ${INSTALL_TRF:-false}
+    volumes:
+      - ./spacy-service/app.py:/app/app.py:rw
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SPACY_API_KEY=${SPACY_API_KEY:-}
+    # For local dev it's convenient to run as root to avoid permission issues when mounting files
+    user: "0:0"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+networks:
+  default:
+    external:
+      name: contentstack-internal

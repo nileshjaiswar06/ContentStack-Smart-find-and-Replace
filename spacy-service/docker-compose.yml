@@ -8,9 +8,6 @@ services:
       context: .
       args:
         INSTALL_TRF: ${INSTALL_TRF:-false}
-    # For development - in production, remove ports and use internal network only
-    ports:
-      - "8000:8000"
     expose:
       - "8000"
     networks:
