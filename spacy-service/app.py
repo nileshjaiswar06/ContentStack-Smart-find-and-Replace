@@ -24,6 +24,19 @@ logger = logging.getLogger(__name__)
 # Global model storage
 models = {}
 
+# Request context storage for correlation IDs
+from contextvars import ContextVar
+request_id_context: ContextVar[str] = ContextVar('request_id', default=None)
+
+def log_with_request_id(level: str, message: str, **kwargs):
+    """Helper to log with request_id context when available"""
+    request_id = request_id_context.get()
+    if request_id:
+        message = f"[req_id={request_id}] {message}"
+    
+    log_func = getattr(logger, level.lower(), logger.info)
+    log_func(message, **kwargs)
+
 # Prometheus metrics
 request_count = Counter('spacy_requests_total', 'Total NER requests', ['method', 'endpoint', 'status'])
 request_duration = Histogram('spacy_request_duration_seconds', 'Request duration', ['method', 'endpoint'])
@@ -31,7 +44,8 @@ entities_extracted = Counter('spacy_entities_extracted_total', 'Total entities e
 text_length_processed = Histogram('spacy_text_length_chars', 'Length of processed text', ['model'])
 active_requests = Gauge('spacy_active_requests', 'Currently active requests')
 model_load_time = Gauge('spacy_model_load_time_seconds', 'Time taken to load models', ['model'])
-circuit_breaker_state = Gauge('spacy_circuit_breaker_failures', 'Circuit breaker failure count')
+# Gauge storing current failure count reported from the gateway
+circuit_breaker_failures_count = Gauge('spacy_circuit_breaker_failures_count', 'Circuit breaker failures (current count)')
 # Additional circuit-breaker metrics reported from Node
 circuit_breaker_open = Gauge('spacy_circuit_breaker_open', 'Circuit breaker open state (1=open, 0=closed)')
 circuit_breaker_pending = Gauge('spacy_circuit_breaker_pending', 'Circuit breaker pending request count')
@@ -79,6 +93,24 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Request ID middleware - runs first to set correlation context
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    """Extract x-request-id header and set in context for logging correlation"""
+    request_id = request.headers.get("x-request-id")
+    if request_id:
+        request_id_context.set(request_id)
+        # Also store in request state for easy access
+        request.state.request_id = request_id
+    
+    response = await call_next(request)
+    
+    # Add request_id to response headers for debugging
+    if request_id:
+        response.headers["x-request-id"] = request_id
+    
+    return response
 
 # Metrics middleware
 @app.middleware("http")
@@ -221,6 +253,8 @@ async def extract_entities(request: NERRequest):
         # Process text
         doc = nlp(request.text)
         
+        log_with_request_id("debug", f"Processing text with model={request.model} length={len(request.text)}")
+        
         # Extract entities with confidence scores
         entities = []
         for ent in doc.ents:
@@ -260,7 +294,7 @@ async def extract_entities(request: NERRequest):
         )
         
     except Exception as e:
-        logger.error(f"Error processing text: {str(e)}")
+        log_with_request_id("error", f"Error processing text: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing text: {str(e)}")
 
 # Batch NER endpoint
@@ -281,6 +315,7 @@ async def extract_entities_batch(request: BatchNERRequest):
     
     try:
         # Process texts in batch for efficiency
+        log_with_request_id("debug", f"Processing batch with model={request.model} batch_size={len(request.texts)}")
         docs = list(nlp.pipe(request.texts))
         
         for i, doc in enumerate(docs):
@@ -325,7 +360,7 @@ async def extract_entities_batch(request: BatchNERRequest):
         )
         
     except Exception as e:
-        logger.error(f"Error processing batch: {str(e)}")
+        log_with_request_id("error", f"Error processing batch: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing batch: {str(e)}")
 
 # Entity labels endpoint
@@ -372,7 +407,7 @@ async def metrics_report(payload: Dict[str, Any], request: Request):
         state = payload.get('state') if isinstance(payload, dict) else None
         request_id = payload.get('requestId') or payload.get('request_id') if isinstance(payload, dict) else None
 
-        logger.debug(f"Received metrics report event={event} request_id={request_id}")
+        log_with_request_id("debug", f"Received metrics report event={event}")
 
         if isinstance(state, dict):
             # open/closed
@@ -392,16 +427,24 @@ async def metrics_report(payload: Dict[str, Any], request: Request):
             # stats -> failures fallback
             stats = state.get('stats') or {}
             if isinstance(stats, dict):
-                failures = stats.get('failures') or stats.get('failureCount') or stats.get('failure_count') or stats.get('failure')
-                if failures is not None:
-                    try:
-                        circuit_breaker_state.set(float(failures))
-                    except Exception:
-                        pass
+                    failures = stats.get('failures') or stats.get('failureCount') or stats.get('failure_count') or stats.get('failure')
+                    if failures is not None:
+                        try:
+                            # Update renamed gauge
+                            circuit_breaker_failures_count.set(float(failures))
+                        except Exception:
+                            pass
+
+            # Log the incoming request_id (if provided) at info level to allow correlation
+            if request_id:
+                try:
+                    log_with_request_id("info", f"metrics_report: event={event} open={state.get('open') if isinstance(state, dict) else 'n/a'} pending={state.get('pending') if isinstance(state, dict) else 'n/a'}")
+                except Exception:
+                    log_with_request_id("debug", "metrics_report: failed to log detailed info")
 
         return {"ok": True}
     except Exception as e:
-        logger.warning(f"Failed to process metrics report: {e}")
+        log_with_request_id("warning", f"Failed to process metrics report: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 if __name__ == "__main__":

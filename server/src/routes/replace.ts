@@ -5,6 +5,7 @@ import { deepReplace } from "../utils/deepReplace.js";
 import { changeCount } from "../utils/diffPreview.js";
 import { logger } from "../utils/logger.js";
 import { extractEntities } from "../services/nerProxy.js";
+import { suggestReplacementsForText } from "../services/suggestionService.js";
 import type { ReplacementRule } from "../types.js";
 import cloneDeep from "lodash.clonedeep";
 
@@ -17,10 +18,12 @@ router.get("/", (_req, res) => {
     error: "Invalid endpoint",
     endpoints: [
       "GET    /:contentTypeUid - List entries of a content type",
-      "POST   /preview - Preview changes before applying",
+      "POST   /preview - Preview changes before applying (includes suggestions)",
       "PUT    /apply - Apply changes to an entry",
       "POST   /bulk-preview - Preview changes for multiple entries",
-      "PUT    /bulk-apply - Apply changes to multiple entries"
+      "PUT    /bulk-apply - Apply changes to multiple entries",
+      "POST   /suggest - Generate replacement suggestions for text",
+      "POST   /suggest/batch - Generate suggestions for multiple texts"
     ]
   });
 });
@@ -124,6 +127,16 @@ router.post("/preview", async (req: Request, res: Response) => {
         logger.warn(`NER enrichment failed: ${e.message || e}`);
       }
     }
+
+    // Generate smart replacement suggestions
+    let suggestions: any[] = [];
+    try {
+      const text = JSON.stringify(after);
+      suggestions = await suggestReplacementsForText(text);
+      logger.debug(`Generated ${suggestions.length} replacement suggestions`);
+    } catch (e: any) {
+      logger.warn(`Suggestion generation failed: ${e.message || e}`);
+    }
     
     return res.json({ 
       ok: true, 
@@ -134,6 +147,8 @@ router.post("/preview", async (req: Request, res: Response) => {
       before,
       after,
       replacedCount,
+      suggestions,
+      ner,
       timestamp: new Date().toISOString()
     });
     

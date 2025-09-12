@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import cors from "cors";
 import routes from "./routes/replace.js";
 import nerRoutes from "./routes/ner.js";
+import suggestRoutes from "./routes/suggest.js";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.js";
 import { requestLoggerMiddleware, helmetMiddleware, readLimiter, writeLimiter } from "./middlewares/requestSecurity.js";
 
@@ -42,6 +43,7 @@ app.use('/api', (req, res, next) => {
 });
 app.use("/api", routes);
 app.use("/api/ner", nerRoutes); // NER routes with their own rate limiting
+app.use("/api/suggest", suggestRoutes); // Suggestion routes
 app.get("/health", (req, res) => res.json({ ok: true, message: "Server healthy" }));
 
 // Error handling middleware (must be last)
