@@ -38,10 +38,30 @@ export async function processBatchJob(payload: any, progressCallback: (p: number
         resultSummary.push({ entryUid: uid, replacedCount, message: dryRun ? "Dry run - not applied" : "No changes" });
       }
     } catch (err: any) {
-      const errorMsg = err?.message || String(err);
-      logger.error(`Worker error on ${uid}: ${errorMsg}`);
+      // Extract axios response body if available (Contentstack validation errors live here)
+      const axiosData = err?.response?.data;
+      const errorMsg = axiosData?.error || axiosData?.message || err?.message || String(err);
+
+      // Log full details in non-production for debugging
+      if (process.env.NODE_ENV !== 'production') {
+        logger.error({
+          msg: `Worker error on ${uid}: ${errorMsg}`,
+          entryUid: uid,
+          axiosData,
+          stack: err?.stack,
+        });
+      } else {
+        logger.error(`Worker error on ${uid}: ${errorMsg}`);
+      }
+
+      // Include details in the job result when not in production to aid debugging
       resultSummary.push({ entryUid: uid, error: errorMsg });
-      entryErrors.push({ entryUid: uid, error: errorMsg, timestamp: new Date().toISOString() });
+      const errorPayload: any = { entryUid: uid, error: errorMsg, timestamp: new Date().toISOString() };
+      if (process.env.NODE_ENV !== 'production') {
+        errorPayload.axiosData = axiosData;
+        errorPayload.stack = err?.stack;
+      }
+      entryErrors.push(errorPayload);
     }
 
     processed++;

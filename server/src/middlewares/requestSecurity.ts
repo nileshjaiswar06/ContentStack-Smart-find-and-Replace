@@ -30,7 +30,11 @@ export const helmetMiddleware = helmet(_helmetOptions);
 
 // Request logger middleware using morgan -> winston; skip health checks to avoid log noise
 export function requestLoggerMiddleware(app: any) {
-  app.use(morgan("combined", {
+  // Add a token for request id so we can include it in morgan's combined format
+  morgan.token('id', (req: any) => (req as any).requestId || '-');
+  // Augment combined format to include :id immediately after remote-addr
+  const combinedWithId = ':remote-addr :id - :remote-user [:date[clf]] ":method :url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent"';
+  app.use(morgan(combinedWithId, {
     skip: (req: any) => req.url.includes("/health"),
     stream: { write: (message: string) => logger.info(message.trim()) }
   }));

@@ -46,7 +46,7 @@ export const errorHandler = (
   error: Error | AppError,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ): void => {
   let statusCode = 500;
   let message = 'Internal Server Error';
@@ -89,19 +89,7 @@ export const errorHandler = (
     details = {};
   }
 
-  // Log error with context
-  logger.error('Application error', {
-    message: error.message,
-    stack: error.stack,
-    name: error.name,
-    statusCode,
-    errorType,
-    method: req.method,
-    url: req.url,
-    ip: req.ip,
-    userAgent: req.get('User-Agent'),
-    requestId: (req as any).requestId
-  });
+  const requestId = (req as any).requestId;
 
   // Prepare error response
   const errorResponse: ErrorResponse = {
@@ -111,11 +99,23 @@ export const errorHandler = (
     code,
     statusCode,
     timestamp: new Date().toISOString(),
-    requestId: (req as any).requestId,
-    path: req.url,
+    requestId,
+    path: req.originalUrl,
     method: req.method,
     ...(process.env.NODE_ENV === 'development' && { details })
   };
+  // Log concise message and include requestId for traceability
+  logger.error(`[ErrorHandler] ${message}`, requestId, {
+    message: error.message,
+    stack: error.stack,
+    name: error.name,
+    statusCode,
+    errorType,
+    method: req.method,
+    path: req.originalUrl,
+    ip: req.ip,
+    userAgent: req.get('User-Agent')
+  });
 
   // Send error response
   res.status(statusCode).json(errorResponse);
@@ -148,17 +148,26 @@ const getErrorTypeFromStatusCode = (statusCode: number): ErrorType => {
 
 // Specific error handlers for Contentstack operations
 export const contentstackErrorHandler = (error: any) => {
-  if (error.statusCode === 401) {
+  // Try to extract axios response data for richer errors (e.g., 422 validation details)
+  const axiosData = error?.response?.data;
+  const statusCode = error?.response?.status ?? error?.statusCode ?? 500;
+  const message = axiosData?.error || axiosData?.message || error?.message || 'Unknown error';
+  const details = axiosData ?? undefined;
+
+  if (statusCode === 401) {
     throw new AppError('Invalid Contentstack credentials', 401, true, 'INVALID_CREDENTIALS');
-  } else if (error.statusCode === 404) {
+  } else if (statusCode === 404) {
     throw new AppError('Contentstack resource not found', 404, true, 'RESOURCE_NOT_FOUND');
   } else {
-    throw new AppError(
-      `Contentstack API error: ${error.message || 'Unknown error'}`,
-      error.statusCode || 500,
+    const appErr = new AppError(
+      `Contentstack API error: ${message}`,
+      statusCode,
       true,
       'CONTENTSTACK_API_ERROR'
     );
+    // attach axios response details in development for debugging
+    (appErr as any).details = details;
+    throw appErr;
   }
 };
 

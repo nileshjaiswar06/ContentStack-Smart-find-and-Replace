@@ -39,12 +39,12 @@ export async function storeSnapshot(payload: {
   const filePath = path.join(SNAPSHOT_DIR, `${id}.json`);
   await fs.writeFile(filePath, JSON.stringify(snapshot, null, 2));
   
-  logger.info('Snapshot created', { 
-    snapshotId: id, 
-    contentTypeUid: payload.contentTypeUid, 
-    entryUid: payload.entryUid,
-    description: snapshot.description 
-  });
+  logger.info(
+    `Snapshot created: snapshotId=${id}, 
+    contentTypeUid=${payload.contentTypeUid}, 
+    entryUid=${payload.entryUid}, 
+    description=${snapshot.description}`
+  );
 
   return id;
 }
@@ -56,7 +56,7 @@ export async function loadSnapshot(snapshotId: string): Promise<Snapshot | null>
     const content = await fs.readFile(filePath, 'utf-8');
     return JSON.parse(content);
   } catch (error: any) {
-    logger.error('Failed to load snapshot', { snapshotId, error: error.message });
+    logger.error('Failed to load snapshot', snapshotId, {error: error.message });
     return null;
   }
 }

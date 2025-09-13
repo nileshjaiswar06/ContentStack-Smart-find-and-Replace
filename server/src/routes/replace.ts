@@ -4,6 +4,8 @@ import { buildRegex } from "../utils/text.js";
 import { deepReplace } from "../utils/deepReplace.js";
 import { changeCount } from "../utils/diffPreview.js";
 import { logger } from "../utils/logger.js";
+import { createBatchJob, getJobStatus, loadJobFromDisk } from "../jobs/batchQueue.js";
+import { loadSnapshot } from "../services/snapshotService.js";
 import { extractEntities } from "../services/nerProxy.js";
 import { suggestReplacementsForText } from "../services/suggestionService.js";
 import type { ReplacementRule } from "../types.js";
@@ -31,6 +33,7 @@ router.get("/", (_req, res) => {
 // List entries of a content type
 router.get("/:contentTypeUid", async (req, res) => {
   const { contentTypeUid } = req.params;
+  const requestId = (req as any).requestId;
   
   if (!contentTypeUid) {
     return res.status(400).json({ 
@@ -50,7 +53,7 @@ router.get("/:contentTypeUid", async (req, res) => {
       } 
     });
   } catch (error: any) {
-    console.error(`Error fetching entries for ${contentTypeUid}:`, error);
+    logger.error(`Error fetching entries for ${contentTypeUid}: ${error?.message || error}`, requestId);
     const status = error.response?.status || 500;
     const message = error.response?.data?.error_message || 
                    error.message || 
@@ -59,7 +62,8 @@ router.get("/:contentTypeUid", async (req, res) => {
     return res.status(status).json({ 
       ok: false, 
       error: message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      requestId
     });
   }
 });
@@ -74,6 +78,7 @@ router.get("/:contentTypeUid", async (req, res) => {
  * @returns {Object} - Preview of changes with before/after comparison
  */
 router.post("/preview", async (req: Request, res: Response) => {
+  const requestId = (req as any).requestId;
   const { target, rule } = req.body as {
     target?: { contentTypeUid?: string; entryUid?: string };
     rule?: ReplacementRule;
@@ -98,7 +103,7 @@ router.post("/preview", async (req: Request, res: Response) => {
   
   try {
   // Fetch the latest draft
-  logger.info(`[Preview] Fetching draft for ${contentTypeUid}/${entryUid}`);
+  logger.info(`[Preview] Fetching draft for ${contentTypeUid}/${entryUid}`, requestId);
   const before = await fetchEntryDraft(contentTypeUid, entryUid);
     
     // Build regex from rule
@@ -114,7 +119,7 @@ router.post("/preview", async (req: Request, res: Response) => {
     const changes = changeCount(before, after);
     const totalChanges = changes.reduce((sum, { count }) => sum + count, 0);
     
-    logger.info(`[Preview] Found ${totalChanges} changes in ${contentTypeUid}/${entryUid}`);
+  logger.info(`[Preview] Found ${totalChanges} changes in ${contentTypeUid}/${entryUid}`, requestId);
 
     // Optionally enrich preview with NER suggestions
     const enableNer = process.env.ENABLE_NER === 'true';
@@ -124,18 +129,18 @@ router.post("/preview", async (req: Request, res: Response) => {
         const text = JSON.stringify(after); // crude: run NER on serialized entry; adapt as needed
         ner = await extractEntities(text);
       } catch (e: any) {
-        logger.warn(`NER enrichment failed: ${e.message || e}`);
+        logger.warn(`NER enrichment failed: ${e.message || e}`, requestId);
       }
     }
 
     // Generate smart replacement suggestions
     let suggestions: any[] = [];
-    try {
+  try {
       const text = JSON.stringify(after);
       suggestions = await suggestReplacementsForText(text);
-      logger.debug(`Generated ${suggestions.length} replacement suggestions`);
+  logger.debug(`Generated ${suggestions.length} replacement suggestions`, requestId);
     } catch (e: any) {
-      logger.warn(`Suggestion generation failed: ${e.message || e}`);
+  logger.warn(`Suggestion generation failed: ${e.message || e}`, requestId);
     }
     
     return res.json({ 
@@ -153,7 +158,7 @@ router.post("/preview", async (req: Request, res: Response) => {
     });
     
   } catch (error: any) {
-  logger.error(`[Preview] Error processing ${contentTypeUid}/${entryUid}: ${error?.message || error}`);
+  logger.error(`[Preview] Error processing ${contentTypeUid}/${entryUid}: ${error?.message || error}`, requestId);
     
     const status = error.response?.status || 500;
     const message = error.response?.data?.error_message || 
@@ -180,6 +185,7 @@ router.post("/preview", async (req: Request, res: Response) => {
  * @returns {Object} - Result of the update operation
  */
 router.put("/apply", async (req: Request, res: Response) => {
+  const requestId = (req as any).requestId;
   const { target, rule } = req.body as {
     target?: { contentTypeUid?: string; entryUid?: string };
     rule?: ReplacementRule;
@@ -203,10 +209,10 @@ router.put("/apply", async (req: Request, res: Response) => {
   const { contentTypeUid, entryUid } = target;
   
   try {
-  logger.info(`[Apply] Starting update for ${contentTypeUid}/${entryUid}`);
+  logger.info(`[Apply] Starting update for ${contentTypeUid}/${entryUid}`, requestId);
     
     // 1. Fetch the latest draft
-  logger.info(`[Apply] Fetching draft for ${contentTypeUid}/${entryUid}`);
+  logger.info(`[Apply] Fetching draft for ${contentTypeUid}/${entryUid}`, requestId);
   const before = await fetchEntryDraft(contentTypeUid, entryUid);
     
     // 2. Build regex from rule
@@ -222,8 +228,8 @@ router.put("/apply", async (req: Request, res: Response) => {
     const changes = changeCount(before, after);
     const totalChanges = changes.reduce((sum, { count }) => sum + count, 0);
     
-    if (totalChanges === 0) {
-    logger.info(`[Apply] No changes detected for ${contentTypeUid}/${entryUid}`);
+  if (totalChanges === 0) {
+  logger.info(`[Apply] No changes detected for ${contentTypeUid}/${entryUid}`, requestId);
       return res.json({ 
         ok: true, 
         entryUid,
@@ -234,13 +240,13 @@ router.put("/apply", async (req: Request, res: Response) => {
       });
     }
     
-  logger.info(`[Apply] Found ${totalChanges} changes in ${contentTypeUid}/${entryUid}`);
+  logger.info(`[Apply] Found ${totalChanges} changes in ${contentTypeUid}/${entryUid}`, requestId);
     
     // 5. Update the entry
-  logger.info(`[Apply] Updating entry ${contentTypeUid}/${entryUid}`);
+  logger.info(`[Apply] Updating entry ${contentTypeUid}/${entryUid}`, requestId);
     const updated = await updateEntry(contentTypeUid, entryUid, after);
     
-  logger.info(`[Apply] Successfully updated ${contentTypeUid}/${entryUid}`);
+  logger.info(`[Apply] Successfully updated ${contentTypeUid}/${entryUid}`, requestId);
     
     return res.json({ 
       ok: true, 
@@ -258,7 +264,7 @@ router.put("/apply", async (req: Request, res: Response) => {
     });
     
   } catch (error: any) {
-  logger.error(`[Apply] Error updating ${contentTypeUid}/${entryUid}: ${error?.message || error}`);
+  logger.error(`[Apply] Error updating ${contentTypeUid}/${entryUid}: ${error?.message || error}`, requestId);
     
     const status = error.response?.status || 500;
     const message = error.response?.data?.error_message || 
@@ -284,6 +290,7 @@ router.put("/apply", async (req: Request, res: Response) => {
  * @returns {Object} - Preview of changes for all entries
  */
 router.post("/bulk-preview", async (req: Request, res: Response) => {
+  const requestId = (req as any).requestId;
   const { contentTypeUid, entryUids, rule } = req.body as {
     contentTypeUid?: string;
     entryUids?: string[];
@@ -321,7 +328,7 @@ router.post("/bulk-preview", async (req: Request, res: Response) => {
   }
 
   try {
-    logger.info(`Bulk preview: Processing ${entryUids.length} entries in ${contentTypeUid}`);
+  logger.info(`Bulk preview: Processing ${entryUids.length} entries in ${contentTypeUid}`, requestId);
     const startTime = Date.now();
     
     // Build regex from rule
@@ -360,11 +367,11 @@ router.post("/bulk-preview", async (req: Request, res: Response) => {
         processedCount++;
         
         if (entryChanges > 0) {
-          logger.debug(`Changes found in ${entryUid}: ${entryChanges} fields updated`);
+          logger.debug(`Changes found in ${entryUid}: ${entryChanges} fields updated`, requestId);
         }
         
       } catch (error: any) {
-        logger.error(`Error in ${entryUid}: ${error.message || 'Unknown error'}`);
+        logger.error(`Error in ${entryUid}: ${error.message || 'Unknown error'}`, requestId);
         results.push({
           entryUid,
           error: error.message || 'Failed to process entry',
@@ -374,7 +381,7 @@ router.post("/bulk-preview", async (req: Request, res: Response) => {
     }
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    logger.info(`Bulk preview completed: ${processedCount} entries processed in ${duration}s, ${totalChanges} total changes`);
+  logger.info(`Bulk preview completed: ${processedCount} entries processed in ${duration}s, ${totalChanges} total changes`, requestId);
     
     return res.json({ 
       ok: true, 
@@ -413,156 +420,63 @@ router.post("/bulk-preview", async (req: Request, res: Response) => {
  * @returns {Object} - Result of the bulk update operation
  */
 router.put("/bulk-apply", async (req: Request, res: Response) => {
-  const { contentTypeUid, entryUids, rule, dryRun = false } = req.body as {
-    contentTypeUid?: string;
-    entryUids?: string[];
-    rule?: ReplacementRule;
-    dryRun?: boolean;
-  };
-
-  // Input validation
-  if (!contentTypeUid) {
-    return res.status(400).json({ 
-      ok: false, 
-      error: "contentTypeUid is required" 
-    });
+  const requestId = (req as any).requestId;
+  const { contentTypeUid, entryUids, rule, dryRun = false } = req.body;
+  if (!contentTypeUid || !entryUids || !Array.isArray(entryUids) || entryUids.length === 0) {
+    return res.status(400).json({ ok: false, error: "contentTypeUid and non-empty entryUids are required" });
   }
-
-  if (!entryUids || !Array.isArray(entryUids) || entryUids.length === 0) {
-    return res.status(400).json({ 
-      ok: false, 
-      error: "entryUids array is required and must not be empty" 
-    });
+  if (!rule?.find || typeof rule.replace === "undefined") {
+    return res.status(400).json({ ok: false, error: "Rule object with find and replace required" });
   }
-  
-  if (!rule?.find || rule.replace === undefined) {
-    return res.status(400).json({ 
-      ok: false, 
-      error: "Rule object with find and replace properties is required" 
-    });
-  }
-
-  // Limit bulk operations to prevent overload
-  if (entryUids.length > 50) {
-    return res.status(400).json({ 
-      ok: false, 
-      error: "Maximum 50 entries allowed per bulk operation" 
-    });
+  if (entryUids.length > 500) { // increased limit but still protective
+    return res.status(400).json({ ok: false, error: "Max entries per batch is 500" });
   }
 
   try {
-    logger.info(`Bulk ${dryRun ? 'dry-run' : 'apply'}: Processing ${entryUids.length} entries in ${contentTypeUid}`);
-    const startTime = Date.now();
-    
-    // Build regex from rule
-    const rx = buildRegex(rule.find, rule.mode ?? "literal", {
-      caseSensitive: rule.caseSensitive ?? false,
-      wholeWord: rule.wholeWord ?? true,
-    });
+  const job = await createBatchJob({ contentTypeUid, entryUids, rule, dryRun });
+  logger.info(`Enqueued job ${job.id} for ${contentTypeUid} (${entryUids.length} entries)`, requestId);
+  return res.json({ ok: true, jobId: job.id, message: "Job queued. Poll /replace/job/:jobId for status", requestId });
+  } catch (err: any) {
+  logger.error("Failed to enqueue job", requestId, { err: err?.message || err });
+  return res.status(500).json({ ok: false, error: "Failed to enqueue job", requestId });
+  }
+});
 
-    const results = [];
-    let totalChanges = 0;
-    let successCount = 0;
-    let errorCount = 0;
+// Job status
+router.get("/job/:jobId", async (req: Request, res: Response) => {
+  const requestId = (req as any).requestId;
+  const jobId = req.params.jobId;
+  if (!jobId) return res.status(400).json({ ok: false, error: "jobId param is required" });
+  try {
+    const job = (await loadJobFromDisk(jobId)) || getJobStatus(jobId);
+    if (!job) return res.status(404).json({ ok: false, error: "Job not found" });
+    return res.json({ ok: true, job, requestId });
+  } catch (err: any) {
+    logger.error(`Failed to fetch job ${jobId} status: ${err?.message || err}`, requestId);
+    return res.status(500).json({ ok: false, error: "Failed to fetch job status", requestId });
+  }
+});
 
-    // Process each entry
-    for (const entryUid of entryUids) {
-      try {
-        const before = await fetchEntryDraft(contentTypeUid, entryUid);
-        const { result: after, replacedCount } = deepReplace(cloneDeep(before), rx, rule.replace, {
-          updateUrls: rule.updateUrls ?? true,
-          updateEmails: rule.updateEmails ?? true
-        });
-        
-        const changes = changeCount(before, after);
-        const entryChanges = changes.reduce((sum, { count }) => sum + count, 0);
-        
-        if (entryChanges === 0) {
-          results.push({
-            entryUid,
-            changes: [],
-            totalChanges: 0,
-            replacedCount: 0,
-            success: true,
-            message: "No changes needed"
-          });
-          successCount++;
-          continue;
-        }
-
-        if (dryRun) {
-          results.push({
-            entryUid,
-            changes,
-            totalChanges: entryChanges,
-            replacedCount,
-            success: true,
-            message: "Dry run - no changes applied"
-          });
-          totalChanges += entryChanges;
-          successCount++;
-        } else {
-          // Apply changes
-          const updated = await updateEntry(contentTypeUid, entryUid, after);
-          
-          results.push({
-            entryUid,
-            changes,
-            totalChanges: entryChanges,
-            replacedCount,
-            success: true,
-            updated: {
-              uid: updated.uid,
-              _version: updated._version,
-              updated_at: updated.updated_at
-            }
-          });
-          
-          totalChanges += entryChanges;
-          successCount++;
-          logger.debug(`Applied ${entryChanges} changes to ${entryUid}`);
-        }
-        
-      } catch (error: any) {
-        logger.error(`Error in ${entryUid}: ${error.message || 'Unknown error'}`);
-        results.push({
-          entryUid,
-          error: error.message || 'Failed to process entry',
-          success: false
-        });
-        errorCount++;
-      }
+// Rollback a job by restoring snapshots (simple file-backed rollback)
+router.post("/rollback", async (req: Request, res: Response) => {
+  const requestId = (req as any).requestId;
+  const { snapshotId, dryRun = false } = req.body;
+  if (!snapshotId) return res.status(400).json({ ok: false, error: "snapshotId is required" });
+  try {
+    const snapshot = await loadSnapshot(snapshotId);
+    if (!snapshot) return res.status(404).json({ ok: false, error: "Snapshot not found" });
+    // Snapshot structure: { id, contentTypeUid, entryUid, data }
+    const { contentTypeUid, entryUid, data: before } = snapshot as any;
+    if (dryRun) {
+      logger.info(`Dry-run rollback for snapshot ${snapshotId} on ${contentTypeUid}/${entryUid}`, requestId);
+      return res.json({ ok: true, message: "Dry run - would restore", before, requestId });
     }
-
-    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    logger.info(`Bulk ${dryRun ? 'dry-run' : 'apply'} completed: ${successCount} successful, ${errorCount} errors, ${totalChanges} changes in ${duration}s`);
-    
-    return res.json({ 
-      ok: true, 
-      contentTypeUid,
-      successCount,
-      errorCount,
-      totalEntries: entryUids.length,
-      totalChanges,
-      dryRun,
-      results,
-      timestamp: new Date().toISOString()
-    });
-    
-  } catch (error: any) {
-    logger.error(`Bulk apply error for ${contentTypeUid}:`, error);
-    
-    const status = error.response?.status || 500;
-    const message = error.response?.data?.error_message || 
-                   error.message || 
-                   'Failed to apply bulk changes';
-    
-    return res.status(status).json({
-      ok: false,
-      error: message,
-      contentTypeUid,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
+    const restored = await updateEntry(contentTypeUid, entryUid, before);
+    logger.info(`Restored ${contentTypeUid}/${entryUid} from snapshot ${snapshotId}`, requestId);
+    return res.json({ ok: true, message: "Restored", restored: { uid: restored.uid, _version: restored._version }, requestId });
+  } catch (err: any) {
+    logger.error(`Rollback failed for snapshot ${snapshotId}: ${err?.message || err}`, requestId);
+    return res.status(500).json({ ok: false, error: "Rollback failed", details: err?.message, requestId });
   }
 });
 

@@ -13,9 +13,9 @@ services:
       - redis
       - spacy-ner
     environment:
-      - NODE_ENV=${NODE_ENV:-development}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
-      - SPACY_SERVICE_URL=http://spacy-ner:8000
+      NODE_ENV: ${NODE_ENV:-development}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      SPACY_SERVICE_URL: "http://spacy-ner:8000"
     ports:
       - "3001:3001"
     networks:
@@ -35,8 +35,8 @@ services:
     networks:
       - contentstack-internal
     environment:
-      - PYTHONUNBUFFERED=1
-      - SPACY_API_KEY=${SPACY_API_KEY:-}
+      PYTHONUNBUFFERED: '1'
+      SPACY_API_KEY: ${SPACY_API_KEY:-}
     restart: unless-stopped
 
   redis:

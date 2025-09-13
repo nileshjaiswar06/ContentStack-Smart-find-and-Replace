@@ -6,7 +6,6 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "tsx watch src/index.ts",
-    
     "build": "tsc",
     "start": "node dist/index.js"
   },
@@ -18,8 +17,7 @@
     "@contentstack/management": "^1.25.0",
     "axios": "^1.11.0",
     "axios-retry": "^4.5.0",
-    "opossum": "^7.0.0",
-    "pino": "^8.16.0",
+    "bullmq": "^4.14.0",
     "compromise": "^14.14.4",
     "cors": "^2.8.5",
     "diff-match-patch": "^1.0.5",
@@ -27,8 +25,11 @@
     "express": "^5.1.0",
     "express-rate-limit": "^8.1.0",
     "helmet": "^8.1.0",
+    "ioredis": "^5.3.2",
     "lodash.clonedeep": "^4.5.0",
     "morgan": "^1.10.1",
+    "opossum": "^7.0.0",
+    "pino": "^8.16.0",
     "winston": "^3.17.0"
   },
   "devDependencies": {
@@ -38,6 +39,8 @@
     "@types/lodash.clonedeep": "^4.5.9",
     "@types/morgan": "^1.9.10",
     "@types/node": "^24.3.0",
+    "@types/opossum": "^8.1.9",
+    "@types/uuid": "^9.0.2",
     "cross-env": "^10.0.0",
     "eslint": "^9.34.0",
     "prettier": "^3.6.2",

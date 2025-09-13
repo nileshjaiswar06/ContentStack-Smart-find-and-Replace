@@ -6,6 +6,7 @@ import nerRoutes from "./routes/ner.js";
 import suggestRoutes from "./routes/suggest.js";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.js";
 import { requestLoggerMiddleware, helmetMiddleware, readLimiter, writeLimiter } from "./middlewares/requestSecurity.js";
+import requestIdMiddleware from "./middlewares/requestId.js";
 
 // Load environment variables
 dotenv.config();
@@ -26,6 +27,8 @@ app.use(cors({
 }));
 
 // Middleware
+// Attach request id before logging so logs can include it
+app.use(requestIdMiddleware);
 requestLoggerMiddleware(app);
 app.use(helmetMiddleware);
 app.use(express.json({ limit: '10mb' })); // Reduced from 50mb for security
