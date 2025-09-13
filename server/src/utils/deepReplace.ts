@@ -1,10 +1,17 @@
 import { replaceWithCase } from "./text.js";
-import { replaceInRteDoc } from "./richTextParser.js";
+import { replaceInRteDocImmutable } from "./richTextParser.js";
 import { logger } from "./logger.js";
 
-// Simple URL and email detection patterns
 const URL_PATTERN = /https?:\/\/[^\s]+/gi;
-const EMAIL_PATTERN = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi;
+const EMAIL_PATTERN = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-zA-Z]{2,}/gi;
+
+function countMatches(text: string, rx: RegExp): number {
+  if (!text || !rx) return 0;
+  const flags = rx.flags.includes("g") ? rx.flags : rx.flags + "g";
+  const clone = new RegExp(rx.source, flags);
+  const matches = [...text.matchAll(clone)];
+  return matches.length;
+}
 
 export function deepReplace(
   obj: any,
@@ -21,39 +28,13 @@ export function deepReplace(
     if (value == null) return value;
 
     if (typeof value === "string") {
-      // Check if we should skip URLs or emails
-      if (!updateUrls && URL_PATTERN.test(value)) {
-        return value;
-      }
-      if (!updateEmails && EMAIL_PATTERN.test(value)) {
-        return value;
-      }
+      if (!updateUrls && URL_PATTERN.test(value)) return value;
+      if (!updateEmails && EMAIL_PATTERN.test(value)) return value;
 
-      const originalValue = value;
-      const newValue = replaceWithCase(value, rx, replacement, true);
-      
-      // Count replacements
-      const matches = value.match(rx);
-      if (matches) {
-        replacedCount += matches.length;
-      }
-      
-      return newValue;
-    }
-
-    // RTE docs: detect by having typical keys
-    if (typeof value === "object" && (value.nodeType || value.type || value.content || value.children)) {
-      const rteResult = replaceInRteDoc(value, rx, replacement);
-      // Count RTE replacements (simplified - you might want to enhance this)
-      const originalText = JSON.stringify(value);
-      const newText = JSON.stringify(rteResult);
-      if (originalText !== newText) {
-        const matches = originalText.match(rx);
-        if (matches) {
-          replacedCount += matches.length;
-        }
-      }
-      return rteResult;
+      const matches = countMatches(value, rx);
+      if (matches === 0) return value;
+      replacedCount += matches;
+      return replaceWithCase(value, rx, replacement, true);
     }
 
     if (Array.isArray(value)) {
@@ -61,17 +42,24 @@ export function deepReplace(
     }
 
     if (typeof value === "object") {
+      // Detect RTE by content/children keys
+      if (value && (value.content || value.children || value.nodeType)) {
+        const { doc: newRte, count } = replaceInRteDocImmutable(value, rx, replacement);
+        replacedCount += count;
+        return newRte;
+      }
+
+      // clone object
       const out: any = {};
       for (const [k, v] of Object.entries(value)) {
         out[k] = processValue(v);
       }
       return out;
     }
-
     return value;
   }
 
-  const result = processValue(obj);
+  const result = processValue(JSON.parse(JSON.stringify(obj)));
   return { result, replacedCount };
 }
 
@@ -81,12 +69,13 @@ export function processEntry(
   rx: RegExp,
   replacement: string,
   entryUid: string,
-  options: { updateUrls?: boolean; updateEmails?: boolean } = {}
+  options: { updateUrls?: boolean; updateEmails?: boolean } = {},
+  requestId?: string
 ) {
   const { result, replacedCount } = deepReplace(entry, rx, replacement, options);
   
   if (replacedCount > 0) {
-    logger.info(`Replaced ${replacedCount} occurrences in entry ${entryUid}`);
+    logger.info(`Replaced ${replacedCount} occurrences in entry ${entryUid}`, requestId);
   }
   
   return { result, replacedCount };

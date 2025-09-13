@@ -7,31 +7,74 @@ function mapChildrenKey(node: Node) {
          Array.isArray(node?.children) ? "children" : null;
 }
 
-export function walkAndReplace(node: any, rx: RegExp, replacement: string) {
-  if (!node) return node;
-
-  // Text node
-  if (typeof node.text === "string") {
-    node.text = replaceWithCase(node.text, rx, replacement, true);
-  }
-
-  // Link node (href + maybe text inside)
-  if (node.attrs?.href && typeof node.attrs.href === "string") {
-    node.attrs.href = node.attrs.href.replace(rx, replacement); // URL case doesn't matter
-  }
-
-  const key = mapChildrenKey(node);
-  if (key) {
-    node[key] = node[key].map((child: Node) => walkAndReplace(child, rx, replacement));
-  }
-  return node;
+function countMatches(text: string, rx: RegExp): number {
+  if (!text || !rx) return 0;
+  const flags = rx.flags.includes("g") ? rx.flags : rx.flags + "g";
+  const clone = new RegExp(rx.source, flags);
+  return [...text.matchAll(clone)].length;
 }
 
-export function replaceInRteDoc(doc: any, rx: RegExp, replacement: string) {
-  if (!doc) return doc;
-  if (Array.isArray(doc)) return doc.map(n => walkAndReplace(n, rx, replacement));
-  if (doc.content || doc.children) return walkAndReplace(doc, rx, replacement);
-  return doc;
+/**
+ * Walks a node immutably, returning { node: newNode, count: number }
+ * count is the number of replacements performed inside this node subtree.
+ */
+function walkAndReplaceImmutable(node: any, rx: RegExp, replacement: string): { node: any; count: number } {
+  if (!node) return { node, count: 0 };
+
+  // shallow clone to avoid mutation
+  const out: any = { ...node };
+  let count = 0;
+
+  if (typeof out.text === "string") {
+    const m = countMatches(out.text, rx);
+    if (m > 0) {
+      out.text = replaceWithCase(out.text, rx, replacement, true);
+      count += m;
+    }
+  }
+
+  if (out.attrs?.href && typeof out.attrs.href === "string") {
+    const m = countMatches(out.attrs.href, rx);
+    if (m > 0) {
+      out.attrs = { ...out.attrs, href: out.attrs.href.replace(rx, replacement) };
+      count += m;
+    }
+  }
+
+  const key = mapChildrenKey(out);
+  if (key) {
+    const kids = out[key] || [];
+    const newKids: any[] = [];
+    for (const child of kids) {
+      const res = walkAndReplaceImmutable(child, rx, replacement);
+      newKids.push(res.node);
+      count += res.count;
+    }
+    out[key] = newKids;
+  }
+  return { node: out, count };
+}
+
+/**
+ * Immutable replacement on a rich text document. Returns { doc: newDoc, count }
+ */
+export function replaceInRteDocImmutable(doc: any, rx: RegExp, replacement: string): { doc: any; count: number } {
+  if (!doc) return { doc, count: 0 };
+  if (Array.isArray(doc)) {
+    const newDocs: any[] = [];
+    let total = 0;
+    for (const n of doc) {
+      const res = walkAndReplaceImmutable(n, rx, replacement);
+      newDocs.push(res.node);
+      total += res.count;
+    }
+    return { doc: newDocs, count: total };
+  }
+  if (doc.content || doc.children) {
+    const res = walkAndReplaceImmutable(doc, rx, replacement);
+    return { doc: res.node, count: res.count };
+  }
+  return { doc, count: 0 };
 }
 
 // Extract plain text (for diffs/Brandkit)

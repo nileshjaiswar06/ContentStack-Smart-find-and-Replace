@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { fetchEntriesOfContentType, fetchEntryDraft, updateEntry } from "../services/contentstackService.js";
 import { buildRegex } from "../utils/text.js";
-import { deepReplace } from "../utils/deepReplace.js";
+import { deepReplace, processEntry } from "../utils/deepReplace.js";
 import { changeCount } from "../utils/diffPreview.js";
 import { logger } from "../utils/logger.js";
 import { createBatchJob, getJobStatus, loadJobFromDisk } from "../jobs/batchQueue.js";
@@ -112,8 +112,8 @@ router.post("/preview", async (req: Request, res: Response) => {
       wholeWord: rule.wholeWord ?? true,
     });
 
-    // Apply replacements
-    const { result: after, replacedCount } = deepReplace(cloneDeep(before), rx, rule.replace);
+  // Apply replacements
+  const { result: after, replacedCount } = processEntry(cloneDeep(before), rx, rule.replace, entryUid, undefined, requestId);
     
     // Calculate changes
     const changes = changeCount(before, after);
@@ -221,8 +221,8 @@ router.put("/apply", async (req: Request, res: Response) => {
       wholeWord: rule.wholeWord ?? true,
     });
 
-    // 3. Apply replacements
-    const { result: after, replacedCount } = deepReplace(cloneDeep(before), rx, rule.replace);
+  // 3. Apply replacements
+  const { result: after, replacedCount } = processEntry(cloneDeep(before), rx, rule.replace, entryUid, undefined, requestId);
     
     // 4. Calculate changes for logging
     const changes = changeCount(before, after);
@@ -345,10 +345,10 @@ router.post("/bulk-preview", async (req: Request, res: Response) => {
     for (const entryUid of entryUids) {
       try {
         const before = await fetchEntryDraft(contentTypeUid, entryUid);
-        const { result: after, replacedCount } = deepReplace(cloneDeep(before), rx, rule.replace, {
+        const { result: after, replacedCount } = processEntry(cloneDeep(before), rx, rule.replace, entryUid, {
           updateUrls: rule.updateUrls ?? true,
           updateEmails: rule.updateEmails ?? true
-        });
+        }, requestId);
         
         const changes = changeCount(before, after);
         const entryChanges = changes.reduce((sum, { count }) => sum + count, 0);
