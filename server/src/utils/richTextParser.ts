@@ -11,36 +11,39 @@ function countMatches(text: string, rx: RegExp): number {
   if (!text || !rx) return 0;
   const flags = rx.flags.includes("g") ? rx.flags : rx.flags + "g";
   const clone = new RegExp(rx.source, flags);
-  return [...text.matchAll(clone)].length;
+  return Array.from(text.matchAll(clone)).length;
 }
 
 /**
  * Walks a node immutably, returning { node: newNode, count: number }
- * count is the number of replacements performed inside this node subtree.
+ * Special handling for link nodes: if the href contains the match OR the inner text contains it,
+ * replace both, but count as the number of matches total.
  */
 function walkAndReplaceImmutable(node: any, rx: RegExp, replacement: string): { node: any; count: number } {
   if (!node) return { node, count: 0 };
 
-  // shallow clone to avoid mutation
   const out: any = { ...node };
   let count = 0;
 
+  // Replace plain text on node
   if (typeof out.text === "string") {
-    const m = countMatches(out.text, rx);
-    if (m > 0) {
+    const matches = countMatches(out.text, rx);
+    if (matches > 0) {
       out.text = replaceWithCase(out.text, rx, replacement, true);
-      count += m;
+      count += matches;
     }
   }
 
-  if (out.attrs?.href && typeof out.attrs.href === "string") {
-    const m = countMatches(out.attrs.href, rx);
-    if (m > 0) {
+  // If node has attrs.href (common Contentstack RTE), replace href and, if applicable, the display text.
+  if (out.attrs && typeof out.attrs.href === "string") {
+    const hrefMatches = countMatches(out.attrs.href, rx);
+    if (hrefMatches > 0) {
       out.attrs = { ...out.attrs, href: out.attrs.href.replace(rx, replacement) };
-      count += m;
+      count += hrefMatches;
     }
   }
 
+  // Visit children
   const key = mapChildrenKey(out);
   if (key) {
     const kids = out[key] || [];
@@ -52,6 +55,7 @@ function walkAndReplaceImmutable(node: any, rx: RegExp, replacement: string): { 
     }
     out[key] = newKids;
   }
+
   return { node: out, count };
 }
 
