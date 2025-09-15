@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { suggestReplacementsForText, type ReplacementSuggestion } from "../services/suggestionService.js";
+import { getAiServiceStatus } from "../services/aiService.js";
 import { logger } from "../utils/logger.js";
 import { asyncHandler } from "../middlewares/errorHandler.js";
 
@@ -24,13 +25,25 @@ router.post("/", asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
-    logger.info("Generating replacement suggestions", { textLength: text.length });
+    const requestId = (req as any).requestId;
+    logger.info("Generating replacement suggestions", { 
+      requestId,
+      textLength: text.length 
+    });
     
-    const suggestions = await suggestReplacementsForText(text);
+    const context = {
+      contentTypeUid: req.body.contentTypeUid,
+      entryUid: req.body.entryUid,
+      replacementRule: req.body.replacementRule
+    };
+    
+    const suggestions = await suggestReplacementsForText(text, context, requestId);
     
     logger.info("Suggestions generated", { 
+      requestId,
       textLength: text.length, 
-      suggestionCount: suggestions.length 
+      suggestionCount: suggestions.length,
+      aiEnabled: process.env.AI_PROVIDER === "gemini"
     });
 
     return res.json({
@@ -42,7 +55,9 @@ router.post("/", asyncHandler(async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
+    const requestId = (req as any).requestId;
     logger.error("Error generating suggestions", { 
+      requestId,
       error: error.message, 
       textLength: text.length 
     });
@@ -96,7 +111,9 @@ router.post("/batch", asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
+    const requestId = (req as any).requestId;
     logger.info("Generating batch replacement suggestions", { 
+      requestId,
       batchSize: texts.length,
       totalLength: texts.reduce((sum, text) => sum + text.length, 0)
     });
@@ -104,7 +121,7 @@ router.post("/batch", asyncHandler(async (req: Request, res: Response) => {
     const results = await Promise.all(
       texts.map(async (text, index) => {
         try {
-          const suggestions = await suggestReplacementsForText(text);
+          const suggestions = await suggestReplacementsForText(text, undefined, requestId);
           return {
             index,
             text,
@@ -113,6 +130,7 @@ router.post("/batch", asyncHandler(async (req: Request, res: Response) => {
           };
         } catch (error: any) {
           logger.error("Error processing text in batch", { 
+            requestId,
             index, 
             error: error.message 
           });
@@ -130,6 +148,7 @@ router.post("/batch", asyncHandler(async (req: Request, res: Response) => {
     const totalSuggestions = results.reduce((sum, result) => sum + result.suggestionCount, 0);
     
     logger.info("Batch suggestions generated", { 
+      requestId,
       batchSize: texts.length,
       totalSuggestions,
       successCount: results.filter(r => !r.error).length
@@ -145,7 +164,9 @@ router.post("/batch", asyncHandler(async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
+    const requestId = (req as any).requestId;
     logger.error("Error generating batch suggestions", { 
+      requestId,
       error: error.message, 
       batchSize: texts.length 
     });
@@ -159,10 +180,21 @@ router.post("/batch", asyncHandler(async (req: Request, res: Response) => {
 
 // Health check for suggestions service
 router.get("/health", (_req: Request, res: Response) => {
+  const aiStatus = getAiServiceStatus();
   res.json({ 
     status: "ok", 
     service: "suggestions",
+    ai: aiStatus,
     timestamp: new Date().toISOString() 
+  });
+});
+
+// AI service status endpoint
+router.get("/ai-status", (_req: Request, res: Response) => {
+  const aiStatus = getAiServiceStatus();
+  res.json({
+    ok: true,
+    data: aiStatus
   });
 });
 

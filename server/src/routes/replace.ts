@@ -135,12 +135,22 @@ router.post("/preview", async (req: Request, res: Response) => {
 
     // Generate smart replacement suggestions
     let suggestions: any[] = [];
-  try {
+    try {
       const text = JSON.stringify(after);
-      suggestions = await suggestReplacementsForText(text);
-  logger.debug(`Generated ${suggestions.length} replacement suggestions`, requestId);
+      const context = {
+        contentTypeUid,
+        entryUid,
+        replacementRule: rule
+      };
+      suggestions = await suggestReplacementsForText(text, context);
+      logger.debug(`Generated ${suggestions.length} replacement suggestions`, {
+        contentTypeUid,
+        entryUid,
+        aiEnabled: process.env.AI_PROVIDER === "gemini",
+        requestId
+      });
     } catch (e: any) {
-  logger.warn(`Suggestion generation failed: ${e.message || e}`, requestId);
+      logger.warn(`Suggestion generation failed: ${e.message || e}`, requestId);
     }
     
     return res.json({ 
