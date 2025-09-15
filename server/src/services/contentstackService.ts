@@ -110,7 +110,7 @@ export async function fetchEntriesOfContentType<T = any>(
   }
 }
 
-// Fetch a single entry (draft or published)
+// Fetch a single entry (draft or published) with deep content coverage
 export async function fetchEntryDraft(
   contentTypeUid: string,
   entryUid: string,
@@ -118,11 +118,19 @@ export async function fetchEntryDraft(
     environment?: string;
     locale?: string;
     include_unpublished?: boolean;
+    include?: number; // Include depth for components/global fields
+    include_global?: boolean; // Include global fields
+    include_owner?: boolean; // Include owner information
   } = {}
 ): Promise<any> {
   try {
     const environment = options.environment ?? ENV;
-    const params: any = { environment };
+    const params: any = { 
+      environment,
+      include: options.include ?? 10, // Deep include for components
+      include_global: options.include_global ?? true, // Include global fields
+      include_owner: options.include_owner ?? false // Include owner info
+    };
     if (options.locale) params.locale = options.locale;
     if (options.include_unpublished)
       params.include_unpublished = options.include_unpublished;
@@ -158,4 +166,42 @@ export async function updateEntry(
   } catch (err: any) {
     throw contentstackErrorHandler(err);
   }
+}
+
+/**
+ * Normalize entry object for processing
+ * Contentstack may nest fields under `entry.data` or `entry[locale]` — produce a consistent object to process.
+ * This ensures our replacement logic can access all content regardless of how Contentstack structures it.
+ */
+export function normalizeEntryForProcessing(entry: any): any {
+  // Handle different Contentstack response structures
+  if (entry?.entry) {
+    return entry.entry;
+  }
+  if (entry?.data) {
+    return entry.data;
+  }
+  // If entry has locale-specific fields, flatten them for processing
+  if (entry && typeof entry === 'object') {
+    const normalized: any = {};
+    let hasLocaleFields = false;
+    
+    // Check if this looks like a localized entry structure
+    for (const [key, value] of Object.entries(entry)) {
+      if (key.match(/^[a-z]{2}(-[A-Z]{2})?$/) && typeof value === 'object') {
+        // This looks like a locale code (e.g., 'en', 'en-us')
+        hasLocaleFields = true;
+        normalized[key] = value;
+      } else if (key !== '_version' && key !== 'uid' && key !== 'created_at' && key !== 'updated_at') {
+        // Regular field
+        normalized[key] = value;
+      }
+    }
+    
+    // If we found locale fields, return the normalized structure
+    // Otherwise, return the original entry
+    return hasLocaleFields ? normalized : entry;
+  }
+  
+  return entry;
 }

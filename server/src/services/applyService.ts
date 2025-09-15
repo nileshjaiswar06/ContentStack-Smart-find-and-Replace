@@ -1,5 +1,6 @@
 import { deepReplace } from "../utils/deepReplace.js";
 import { logger } from "../utils/logger.js";
+import { normalizeEntryForProcessing } from "./contentstackService.js";
 
 export interface ApplyOptions {
   updateUrls?: boolean;
@@ -34,9 +35,12 @@ export function applySuggestionsToDoc(
   suggestions: any[], 
   options: ApplyOptions = {}
 ): ApplyResult {
+  // Normalize the entry structure for consistent processing
+  const normalizedDoc = normalizeEntryForProcessing(doc);
+  
   // Build combined per-suggestion regex with word boundary / exact-match heuristics.
   // We will run deepReplace sequentially for each suggestion so we can track replacement counts per suggestion.
-  let workingDoc = JSON.parse(JSON.stringify(doc));
+  let workingDoc = JSON.parse(JSON.stringify(normalizedDoc));
   const summary: any[] = [];
   let totalReplaced = 0;
 
@@ -83,7 +87,7 @@ export function applySuggestionsToDoc(
   });
 
   return {
-    before: doc,
+    before: normalizedDoc,
     after: workingDoc,
     summary,
     totalReplaced

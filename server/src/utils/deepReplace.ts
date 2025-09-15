@@ -1,6 +1,7 @@
 import { replaceWithCase } from "./text.js";
 import { replaceInRteDocImmutable } from "./richTextParser.js";
 import { logger } from "./logger.js";
+import { normalizeEntryForProcessing } from "../services/contentstackService.js";
 
 const URL_PATTERN = /https?:\/\/[^\s]+/gi;
 const EMAIL_PATTERN = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-zA-Z]{2,}/gi;
@@ -72,7 +73,9 @@ export function processEntry(
   options: { updateUrls?: boolean; updateEmails?: boolean } = {},
   requestId?: string
 ) {
-  const { result, replacedCount } = deepReplace(entry, rx, replacement, options);
+  // Normalize the entry structure for consistent processing
+  const normalizedEntry = normalizeEntryForProcessing(entry);
+  const { result, replacedCount } = deepReplace(normalizedEntry, rx, replacement, options);
   
   if (replacedCount > 0) {
     logger.info(`Replaced ${replacedCount} occurrences in entry ${entryUid}`, requestId);

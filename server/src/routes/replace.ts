@@ -105,9 +105,13 @@ router.post("/preview", async (req: Request, res: Response) => {
   const { contentTypeUid, entryUid } = target;
   
   try {
-  // Fetch the latest draft
+  // Fetch the latest draft with deep content coverage
   logger.info(`[Preview] Fetching draft for ${contentTypeUid}/${entryUid}`, requestId);
-  const before = await fetchEntryDraft(contentTypeUid, entryUid);
+  const before = await fetchEntryDraft(contentTypeUid, entryUid, {
+    include: 10, // Deep include for components
+    include_global: true, // Include global fields
+    include_unpublished: true // Include unpublished content
+  });
     
     // Build regex from rule
     const rx = buildRegex(rule.find, rule.mode ?? "literal", {
@@ -250,9 +254,13 @@ router.put("/apply", async (req: Request, res: Response) => {
   try {
   logger.info(`[Apply] Starting update for ${contentTypeUid}/${entryUid}`, requestId);
     
-    // 1. Fetch the latest draft
+    // 1. Fetch the latest draft with deep content coverage
   logger.info(`[Apply] Fetching draft for ${contentTypeUid}/${entryUid}`, requestId);
-  const before = await fetchEntryDraft(contentTypeUid, entryUid);
+  const before = await fetchEntryDraft(contentTypeUid, entryUid, {
+    include: 10, // Deep include for components
+    include_global: true, // Include global fields
+    include_unpublished: true // Include unpublished content
+  });
     
     // 2. Build regex from rule
     const rx = buildRegex(rule.find, rule.mode ?? "literal", {
