@@ -8,6 +8,7 @@ import { createBatchJob, getJobStatus, loadJobFromDisk } from "../jobs/batchQueu
 import { loadSnapshot } from "../services/snapshotService.js";
 import { extractEntities } from "../services/nerProxy.js";
 import { suggestReplacementsForText } from "../services/suggestionService.js";
+import { applySuggestionsToDoc, type ApplyOptions } from "../services/applyService.js";
 import type { ReplacementRule } from "../types.js";
 import cloneDeep from "lodash.clonedeep";
 
@@ -20,8 +21,8 @@ router.get("/", (_req, res) => {
     error: "Invalid endpoint",
     endpoints: [
       "GET    /:contentTypeUid - List entries of a content type",
-      "POST   /preview - Preview changes before applying (includes suggestions)",
-      "PUT    /apply - Apply changes to an entry",
+      "POST   /preview - Preview changes before applying (includes suggestions + applySuggestions option)",
+      "PUT    /apply - Apply changes to an entry (includes applySuggestions option)",
       "POST   /bulk-preview - Preview changes for multiple entries",
       "PUT    /bulk-apply - Apply changes to multiple entries",
       "POST   /suggest - Generate replacement suggestions for text",
@@ -79,9 +80,11 @@ router.get("/:contentTypeUid", async (req, res) => {
  */
 router.post("/preview", async (req: Request, res: Response) => {
   const requestId = (req as any).requestId;
-  const { target, rule } = req.body as {
+  const { target, rule, applySuggestions, suggestionThreshold } = req.body as {
     target?: { contentTypeUid?: string; entryUid?: string };
     rule?: ReplacementRule;
+    applySuggestions?: boolean;
+    suggestionThreshold?: number;
   };
 
   // Input validation
@@ -152,6 +155,29 @@ router.post("/preview", async (req: Request, res: Response) => {
     } catch (e: any) {
       logger.warn(`Suggestion generation failed: ${e.message || e}`, requestId);
     }
+
+    // Apply suggestions if requested
+    let appliedSuggestions: any = null;
+    if (applySuggestions && suggestions.length > 0) {
+      try {
+        const applyOptions: ApplyOptions = {
+          updateUrls: true,
+          updateEmails: true,
+          suggestionThreshold: suggestionThreshold ?? 0.5
+        };
+        
+        appliedSuggestions = applySuggestionsToDoc(after, suggestions, applyOptions);
+        
+        logger.info("Applied suggestions to preview", {
+          totalSuggestions: suggestions.length,
+          appliedCount: appliedSuggestions.totalReplaced,
+          threshold: applyOptions.suggestionThreshold,
+          requestId
+        });
+      } catch (e: any) {
+        logger.warn(`Failed to apply suggestions: ${e.message || e}`, requestId);
+      }
+    }
     
     return res.json({ 
       ok: true, 
@@ -164,6 +190,7 @@ router.post("/preview", async (req: Request, res: Response) => {
       replacedCount,
       suggestions,
       ner,
+      appliedSuggestions,
       timestamp: new Date().toISOString()
     });
     
@@ -196,9 +223,11 @@ router.post("/preview", async (req: Request, res: Response) => {
  */
 router.put("/apply", async (req: Request, res: Response) => {
   const requestId = (req as any).requestId;
-  const { target, rule } = req.body as {
+  const { target, rule, applySuggestions, suggestionThreshold } = req.body as {
     target?: { contentTypeUid?: string; entryUid?: string };
     rule?: ReplacementRule;
+    applySuggestions?: boolean;
+    suggestionThreshold?: number;
   };
 
   // Input validation
@@ -251,10 +280,46 @@ router.put("/apply", async (req: Request, res: Response) => {
     }
     
   logger.info(`[Apply] Found ${totalChanges} changes in ${contentTypeUid}/${entryUid}`, requestId);
+
+    // 5. Apply suggestions if requested
+    let appliedSuggestions: any = null;
+    let finalAfter = after;
+    if (applySuggestions) {
+      try {
+        // Generate suggestions for the current state
+        const text = JSON.stringify(after);
+        const context = {
+          contentTypeUid,
+          entryUid,
+          replacementRule: rule
+        };
+        const suggestions = await suggestReplacementsForText(text, context, requestId);
+        
+        if (suggestions.length > 0) {
+          const applyOptions: ApplyOptions = {
+            updateUrls: true,
+            updateEmails: true,
+            suggestionThreshold: suggestionThreshold ?? 0.5
+          };
+          
+          appliedSuggestions = applySuggestionsToDoc(after, suggestions, applyOptions);
+          finalAfter = appliedSuggestions.after;
+          
+          logger.info("Applied suggestions during apply", {
+            totalSuggestions: suggestions.length,
+            appliedCount: appliedSuggestions.totalReplaced,
+            threshold: applyOptions.suggestionThreshold,
+            requestId
+          });
+        }
+      } catch (e: any) {
+        logger.warn(`Failed to apply suggestions during apply: ${e.message || e}`, requestId);
+      }
+    }
     
-    // 5. Update the entry
+    // 6. Update the entry
   logger.info(`[Apply] Updating entry ${contentTypeUid}/${entryUid}`, requestId);
-    const updated = await updateEntry(contentTypeUid, entryUid, after);
+    const updated = await updateEntry(contentTypeUid, entryUid, finalAfter);
     
   logger.info(`[Apply] Successfully updated ${contentTypeUid}/${entryUid}`, requestId);
     
@@ -270,6 +335,7 @@ router.put("/apply", async (req: Request, res: Response) => {
         updated_at: updated.updated_at
       },
       replacedCount,
+      appliedSuggestions,
       timestamp: new Date().toISOString()
     });
     
