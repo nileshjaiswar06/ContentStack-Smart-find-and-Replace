@@ -34,11 +34,20 @@ export function extractNamedEntitiesFromText(text: string): NamedEntity[] {
   orgs.forEach((o: string) => entities.push({ type: "Organization", text: o }));
 
   // Dates and places using compromise shortcuts
-  const dates = Array.from(new Set(((doc as any).dates()?.out("array") ?? []) as string[]));
-  dates.forEach((d: string) => entities.push({ type: "Date", text: d }));
+  // Note: dates() and places() methods may not be available in all versions
+  try {
+    const dates = Array.from(new Set(((doc as any).dates()?.out("array") ?? []) as string[]));
+    dates.forEach((d: string) => entities.push({ type: "Date", text: d }));
+  } catch (e) {
+    // dates() method not available, skipped
+  }
 
-  const places = Array.from(new Set(((doc as any).places()?.out("array") ?? []) as string[]));
-  places.forEach((p: string) => entities.push({ type: "Place", text: p }));
+  try {
+    const places = Array.from(new Set(((doc as any).places()?.out("array") ?? []) as string[]));
+    places.forEach((p: string) => entities.push({ type: "Place", text: p }));
+  } catch (e) {
+    // places() method not available, skipped
+  }
 
   // Use noun chunks as a lightweight fallback for 'Other' entities, avoid repeating existing entities
   const existing = new Set(entities.map((e) => e.text));

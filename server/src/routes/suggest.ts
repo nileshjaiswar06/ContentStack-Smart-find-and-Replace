@@ -58,13 +58,15 @@ router.post("/", asyncHandler(async (req: Request, res: Response) => {
     const requestId = (req as any).requestId;
     logger.error("Error generating suggestions", { 
       requestId,
-      error: error.message, 
+      error: error.message,
+      stack: error.stack,
       textLength: text.length 
     });
     
     return res.status(500).json({
       ok: false,
-      error: "Failed to generate suggestions"
+      error: "Failed to generate suggestions",
+      details: error.message
     });
   }
 }));

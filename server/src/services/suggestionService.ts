@@ -88,10 +88,8 @@ export async function suggestReplacementsForText(
           const entry: ReplacementSuggestion = {
             entity: match ? match.entity : ({ 
               text: ai.originalText, 
-              type: "Unknown", 
-              start: 0, 
-              end: ai.originalText.length 
-            } as any),
+              type: "Other"
+            } as NamedEntity),
             suggestedReplacement: ai.suggestedReplacement,
             confidence: ai.confidence ?? 0.7,
             ...(ai.reason && { reason: ai.reason }),
@@ -140,10 +138,8 @@ export async function suggestReplacementsForText(
           const entry: ReplacementSuggestion = {
             entity: { 
               text: contextual.originalText, 
-              type: "Contextual", 
-              start: 0, 
-              end: contextual.originalText.length 
-            } as any,
+              type: "Other"
+            } as NamedEntity,
             suggestedReplacement: contextual.suggestedReplacement,
             confidence: contextual.confidence ?? 0.6,
             reason: contextual.reason || "Contextual alternative",
