@@ -122,9 +122,27 @@ router.post("/preview", async (req: Request, res: Response) => {
   // Apply replacements
   const { result: after, replacedCount } = processEntry(cloneDeep(before), rx, rule.replace, entryUid, undefined, requestId);
     
-    // Calculate changes
+    // Calculate changes (fields changed)
     const changes = changeCount(before, after);
     const totalChanges = changes.reduce((sum, { count }) => sum + count, 0);
+
+    // Also compute occurrences per top-level field using the same regex
+    const occurrencesByField: Array<{ field: string; occurrences: number }> = [];
+    let occurrencesTotal = 0;
+    try {
+      for (const { field } of changes) {
+        const beforeVal = JSON.stringify(before?.[field] ?? "");
+        const flags = rx.flags.includes("g") ? rx.flags : rx.flags + "g";
+        const clone = new RegExp(rx.source, flags);
+        const matches = [...beforeVal.matchAll(clone)];
+        const occ = matches.length;
+        occurrencesByField.push({ field, occurrences: occ });
+        occurrencesTotal += occ;
+      }
+    } catch (e) {
+      // Non-fatal; fall back to empty occurrences
+      logger.debug(`Failed to compute occurrencesByField: ${String(e)}`);
+    }
     
   logger.info(`[Preview] Found ${totalChanges} changes in ${contentTypeUid}/${entryUid}`, requestId);
 
@@ -192,6 +210,8 @@ router.post("/preview", async (req: Request, res: Response) => {
       before,
       after,
       replacedCount,
+      occurrencesByField,
+      occurrencesTotal,
       suggestions,
       ner,
       appliedSuggestions,
@@ -436,12 +456,31 @@ router.post("/bulk-preview", async (req: Request, res: Response) => {
         
         const changes = changeCount(before, after);
         const entryChanges = changes.reduce((sum, { count }) => sum + count, 0);
+
+        // compute occurrences for this entry's changed fields
+        const occurrencesByField: Array<{ field: string; occurrences: number }> = [];
+        let occurrencesForEntry = 0;
+        try {
+          for (const { field } of changes) {
+            const beforeVal = JSON.stringify(before?.[field] ?? "");
+            const flags = rx.flags.includes("g") ? rx.flags : rx.flags + "g";
+            const clone = new RegExp(rx.source, flags);
+            const matches = [...beforeVal.matchAll(clone)];
+            const occ = matches.length;
+            occurrencesByField.push({ field, occurrences: occ });
+            occurrencesForEntry += occ;
+          }
+        } catch (e) {
+          logger.debug(`Failed to compute per-entry occurrences: ${String(e)}`);
+        }
         
         results.push({
           entryUid,
           changes,
           totalChanges: entryChanges,
           replacedCount,
+          occurrencesByField,
+          occurrencesTotal: occurrencesForEntry,
           before,
           after,
           success: true

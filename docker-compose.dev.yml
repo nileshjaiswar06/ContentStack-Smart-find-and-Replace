@@ -22,7 +22,7 @@ services:
     volumes:
       - ./spacy-service/app.py:/app/app.py:rw
     ports:
-      - "8001http://localhost:3001/api/preview?environment=development&branch=main:8000"
+      - "8001:8000"
     environment:
       - PYTHONUNBUFFERED=1
       - SPACY_API_KEY=${SPACY_API_KEY:-}
