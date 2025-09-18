@@ -6,8 +6,13 @@ services:
       context: ./server
     volumes:
       - ./server:/usr/src/app:rw
+      # Mount local .env so container picks up any local env overrides during development
+      - ./server/.env:/usr/src/app/.env:ro
     environment:
       - NODE_ENV=development
+      # Forward Gemini config from host .env (or override here for quick tests)
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=gemini-2.0-flash-exp
     ports:
       - "3001:3001"
     depends_on:

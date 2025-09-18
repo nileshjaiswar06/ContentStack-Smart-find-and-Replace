@@ -14,7 +14,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash-exp";
 
 // Gemini 2.5 Pro API configuration
-const GEMINI_BASE_URL = "https://generative.googleapis.com/v1beta";
+const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 
 interface GeminiRequest {
   contents: Array<{
