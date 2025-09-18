@@ -1,8 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
-import { v4 as uuidv4 } from "uuid";
 import { logger } from "../utils/logger.js";
-import { updateEntry } from "./contentstackService.js";
 
 interface Snapshot {
   id: string;
@@ -41,8 +39,11 @@ export async function storeSnapshot(payload: {
   
   logger.info(
     `Snapshot created: snapshotId=${id}, 
+    
     contentTypeUid=${payload.contentTypeUid}, 
+    
     entryUid=${payload.entryUid}, 
+    
     description=${snapshot.description}`
   );
 

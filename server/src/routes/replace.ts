@@ -1,11 +1,13 @@
 import { Router, type Request, type Response } from "express";
 import { fetchEntriesOfContentType, fetchEntryDraft, updateEntry } from "../services/contentstackService.js";
+import path from "path";
 import { buildRegex } from "../utils/text.js";
 import { deepReplace, processEntry } from "../utils/deepReplace.js";
 import { changeCount } from "../utils/diffPreview.js";
 import { logger } from "../utils/logger.js";
 import { createBatchJob, getJobStatus, loadJobFromDisk } from "../jobs/batchQueue.js";
 import { loadSnapshot } from "../services/snapshotService.js";
+import { listSnapshots } from "../services/snapshotService.js";
 import { extractEntities } from "../services/nerProxy.js";
 import { suggestReplacementsForText } from "../services/suggestionService.js";
 import { applySuggestionsToDoc, type ApplyOptions } from "../services/applyService.js";
@@ -29,6 +31,32 @@ router.get("/", (_req, res) => {
       "POST   /suggest/batch - Generate suggestions for multiple texts"
     ]
   });
+});
+
+// List available snapshots (placed before the :contentTypeUid param route to avoid param collisions)
+router.get("/snapshots", async (_req: Request, res: Response) => {
+  try {
+    const files = await listSnapshots();
+    const items = await Promise.all(files.map(async (p: string) => {
+      try {
+        const snap = await loadSnapshot(path.basename(p, '.json'));
+        if (!snap) return null;
+        return {
+          id: snap.id,
+          contentTypeUid: snap.contentTypeUid,
+          entryUid: snap.entryUid,
+          createdAt: snap.createdAt,
+          description: snap.description
+        };
+      } catch (e) {
+        return null;
+      }
+    }));
+
+    return res.json({ ok: true, snapshots: items.filter(Boolean) });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'Failed to list snapshots', details: err?.message });
+  }
 });
 
 // List entries of a content type
@@ -602,5 +630,7 @@ router.post("/rollback", async (req: Request, res: Response) => {
     return res.status(500).json({ ok: false, error: "Rollback failed", details: err?.message, requestId });
   }
 });
+
+ 
 
 export default router;

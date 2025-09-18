@@ -33,6 +33,18 @@ export async function processBatchJob(payload: any, progressCallback: (p: number
         const maybeVersion = before._version ? { _version: before._version } : {};
         const toUpdate = { ...after, ...maybeVersion };
         const updated = await updateEntry(contentTypeUid, uid, toUpdate);
+
+        // Emit a concise log entry with the CMA response to aid tracing in job logs
+        try {
+          logger.info(`Updated entry ${contentTypeUid}/${uid} -> uid=${updated.uid}, _version=${updated._version}`, {
+            entryUid: uid,
+            contentTypeUid,
+            updatedVersion: updated._version
+          });
+        } catch (e) {
+          // non-fatal: continue even if logging fails
+        }
+
         resultSummary.push({ entryUid: uid, replacedCount, updated: { uid: updated.uid, _version: updated._version }});
       } else {
         resultSummary.push({ entryUid: uid, replacedCount, message: dryRun ? "Dry run - not applied" : "No changes" });
