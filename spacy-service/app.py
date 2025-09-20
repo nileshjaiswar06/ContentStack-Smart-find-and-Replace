@@ -5,32 +5,31 @@ High-performance Named Entity Recognition with confidence scores and entity span
 
 import spacy
 import uvicorn
+import os
+import logging
+import time
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
+from typing import List, Optional, Dict, Any
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
-import logging
-import time
-from contextlib import asynccontextmanager
-
-# Prometheus metrics
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Global model storage
+# Global storage for models and custom entity rulers
 models = {}
 custom_rulers = {}
 
-# Request context storage for correlation IDs
-from contextvars import ContextVar
+# Request correlation ID storage
 request_id_context: ContextVar[str] = ContextVar('request_id', default=None)
 
 def log_with_request_id(level: str, message: str, **kwargs):
-    """Helper to log with request_id context when available"""
+    """Helper function to include request ID in log messages when available"""
     request_id = request_id_context.get()
     if request_id:
         message = f"[req_id={request_id}] {message}"
@@ -38,25 +37,25 @@ def log_with_request_id(level: str, message: str, **kwargs):
     log_func = getattr(logger, level.lower(), logger.info)
     log_func(message, **kwargs)
 
-# Prometheus metrics
+# Prometheus metrics setup
 request_count = Counter('spacy_requests_total', 'Total NER requests', ['method', 'endpoint', 'status'])
 request_duration = Histogram('spacy_request_duration_seconds', 'Request duration', ['method', 'endpoint'])
 entities_extracted = Counter('spacy_entities_extracted_total', 'Total entities extracted', ['model', 'label'])
 text_length_processed = Histogram('spacy_text_length_chars', 'Length of processed text', ['model'])
 active_requests = Gauge('spacy_active_requests', 'Currently active requests')
 model_load_time = Gauge('spacy_model_load_time_seconds', 'Time taken to load models', ['model'])
-# Gauge storing current failure count reported from the gateway
+
+# Circuit breaker metrics - updated by Node service via /metrics/report
 circuit_breaker_failures_count = Gauge('spacy_circuit_breaker_failures_count', 'Circuit breaker failures (current count)')
-# Additional circuit-breaker metrics reported from Node
 circuit_breaker_open = Gauge('spacy_circuit_breaker_open', 'Circuit breaker open state (1=open, 0=closed)')
 circuit_breaker_pending = Gauge('spacy_circuit_breaker_pending', 'Circuit breaker pending request count')
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load models on startup"""
+    """Application startup and shutdown handler"""
     logger.info("Loading spaCy models...")
     
-    # Load both speed and accuracy models
+    # Load fast model (en_core_web_sm)
     try:
         start_time = time.time()
         models['en_core_web_sm'] = spacy.load("en_core_web_sm")
@@ -67,6 +66,7 @@ async def lifespan(app: FastAPI):
         logger.warning("en_core_web_sm not found. Install with: python -m spacy download en_core_web_sm")
         models['en_core_web_sm'] = None
     
+    # Load transformer model (en_core_web_trf)
     try:
         start_time = time.time()
         models['en_core_web_trf'] = spacy.load("en_core_web_trf")
@@ -80,7 +80,7 @@ async def lifespan(app: FastAPI):
     if not any(models.values()):
         raise RuntimeError("No spaCy models available. Install at least one model.")
     
-    # Initialize custom entity rulers for each model
+    # Initialize custom entity rulers
     try:
         from entity_ruler import BrandProductEntityRuler
         
@@ -89,7 +89,7 @@ async def lifespan(app: FastAPI):
                 custom_rulers[model_name] = BrandProductEntityRuler(nlp, model_name)
                 logger.info(f"Initialized custom entity ruler for {model_name}")
         
-        # Load training data if available
+        # Load training data if present
         if os.path.exists("training_data.json"):
             for ruler in custom_rulers.values():
                 ruler.load_training_data("training_data.json")
@@ -108,7 +108,7 @@ async def lifespan(app: FastAPI):
     custom_rulers.clear()
     logger.info("spaCy service shutdown complete")
 
-# Create FastAPI app
+# Create FastAPI application
 app = FastAPI(
     title="spaCy NER Service",
     description="High-performance Named Entity Recognition for Contentstack Find & Replace",
@@ -116,32 +116,30 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Request ID middleware - runs first to set correlation context
+# Middleware: Request ID correlation for logging
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
-    """Extract x-request-id header and set in context for logging correlation"""
+    """Extract and store request ID for logging correlation"""
     request_id = request.headers.get("x-request-id")
     if request_id:
         request_id_context.set(request_id)
-        # Also store in request state for easy access
         request.state.request_id = request_id
     
     response = await call_next(request)
     
-    # Add request_id to response headers for debugging
+    # Echo request ID back in response headers
     if request_id:
         response.headers["x-request-id"] = request_id
     
     return response
 
-# Metrics middleware
+# Middleware: Prometheus metrics collection
 @app.middleware("http")
 async def metrics_middleware(request: Request, call_next):
-    """Track request metrics"""
+    """Collect request metrics for monitoring"""
     start_time = time.time()
     active_requests.inc()
     
-    # Get endpoint and method for labeling
     endpoint = request.url.path
     method = request.method
     
@@ -149,25 +147,22 @@ async def metrics_middleware(request: Request, call_next):
         response = await call_next(request)
         status = str(response.status_code)
         
-        # Record metrics
         request_count.labels(method=method, endpoint=endpoint, status=status).inc()
         request_duration.labels(method=method, endpoint=endpoint).observe(time.time() - start_time)
         
         return response
     except Exception as e:
-        # Record failed requests
         request_count.labels(method=method, endpoint=endpoint, status="500").inc()
         request_duration.labels(method=method, endpoint=endpoint).observe(time.time() - start_time)
         raise
     finally:
         active_requests.dec()
 
-# Configure CORS for local development and configured origins
+# Configure CORS
 allowed = []
 try:
     from dotenv import load_dotenv
     load_dotenv()
-    import os
     allowed = [o.strip() for o in (os.getenv("SPACY_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")).split(",") if o.strip()]
 except Exception:
     allowed = ["http://localhost:3000", "http://127.0.0.1:3000"]
@@ -180,22 +175,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# Optional simple API key auth for internal services
+# Optional API key authentication
 try:
-    import os
     SPACY_API_KEY = os.getenv("SPACY_API_KEY")
 except Exception:
     SPACY_API_KEY = None
 
-
+# Middleware: API key validation
 @app.middleware("http")
 async def api_key_middleware(request, call_next):
-    # If no key configured, allow all requests
+    """Simple API key authentication for internal services"""
     if not SPACY_API_KEY:
         return await call_next(request)
 
-    # Allow health and labels without key for basic checks
+    # Allow health check and labels endpoint without authentication
     if request.url.path in ("/health", "/labels"):
         return await call_next(request)
 
@@ -207,7 +200,7 @@ async def api_key_middleware(request, call_next):
     return await call_next(request)
 
 
-# Pydantic models
+# Pydantic models for request/response validation
 class Entity(BaseModel):
     text: str = Field(..., description="The entity text")
     label: str = Field(..., description="Entity label (PERSON, ORG, GPE, etc.)")
@@ -242,7 +235,7 @@ class BatchNERResponse(BaseModel):
 # Health check endpoint
 @app.get("/health")
 async def health_check():
-    """Service health check"""
+    """Check service health and list available models"""
     available_models = [name for name, model in models.items() if model is not None]
     return {
         "status": "healthy",
@@ -253,118 +246,170 @@ async def health_check():
 # Prometheus metrics endpoint
 @app.get("/metrics", response_class=PlainTextResponse)
 async def get_metrics():
-    """Prometheus metrics endpoint"""
+    """Export Prometheus metrics"""
     return generate_latest()
 
-# Single text NER endpoint
+# Main NER endpoint with auto model selection
 @app.post("/ner", response_model=NERResponse)
 async def extract_entities(request: NERRequest):
-    """Extract named entities from text with confidence scores and spans"""
+    """
+    Extract named entities from text with confidence scores and spans.
+    
+    Supports 'auto' model mode which runs fast model first (en_core_web_sm) 
+    and escalates to transformer (en_core_web_trf) based on heuristics like 
+    text length, entity confidence, and complexity.
+    """
     start_time = time.time()
-    
-    # Validate model
-    if request.model not in models or models[request.model] is None:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Model '{request.model}' not available. Available: {list(models.keys())}"
-        )
-    
-    nlp = models[request.model]
-    
-    try:
-        # Process text
+
+    def calculate_entity_confidence(entity_text: str) -> float:
+        """Calculate confidence score based on entity text length"""
+        return min(1.0, max(0.0, len(entity_text) / 10.0))
+
+    def process_with_model(model_name: str):
+        """Run NLP processing with specified model and collect entities"""
+        nlp = models.get(model_name)
+        if nlp is None:
+            return []
+        
         doc = nlp(request.text)
-        
-        log_with_request_id("debug", f"Processing text with model={request.model} length={len(request.text)}")
-        
-        # Extract entities with confidence scores
-        entities = []
-        
-        # First, extract standard spaCy entities
-        for ent in doc.ents:
-            # Calculate confidence (spaCy doesn't provide this directly, so we use a heuristic)
-            confidence = min(1.0, len(ent.text) / 10.0)  # Longer entities = higher confidence
-            
-            # Apply confidence filter
+        collected_entities = []
+
+        # Process standard spaCy entities
+        for entity in doc.ents:
+            confidence = calculate_entity_confidence(entity.text)
             if confidence < request.min_confidence:
                 continue
-            
-            # Apply label filter
-            if request.labels and ent.label_ not in request.labels:
+            if request.labels and entity.label_ not in request.labels:
                 continue
             
-            # Track entity extraction metrics
-            entities_extracted.labels(model=request.model, label=ent.label_).inc()
-            
-            entities.append(Entity(
-                text=ent.text,
-                label=ent.label_,
-                start=ent.start_char,
-                end=ent.end_char,
-                confidence=confidence
-            ))
-        
-        # Add custom entities from EntityRuler if available
-        if request.model in custom_rulers:
-            try:
-                custom_entities = custom_rulers[request.model].process_text(request.text)
-                
-                for custom_ent in custom_entities:
-                    # Apply confidence filter
-                    if custom_ent['confidence'] < request.min_confidence:
+            entities_extracted.labels(model=model_name, label=entity.label_).inc()
+            collected_entities.append({
+                'text': entity.text,
+                'label': entity.label_,
+                'start': entity.start_char,
+                'end': entity.end_char,
+                'confidence': confidence,
+                'source': model_name
+            })
+
+        # Process custom entity ruler results
+        try:
+            if model_name in custom_rulers:
+                custom_entities = custom_rulers[model_name].process_text(request.text)
+                for custom_entity in custom_entities:
+                    if custom_entity['confidence'] < request.min_confidence:
                         continue
-                    
-                    # Apply label filter
-                    if request.labels and custom_ent['label'] not in request.labels:
+                    if request.labels and custom_entity['label'] not in request.labels:
                         continue
-                    
-                    # Track entity extraction metrics
-                    entities_extracted.labels(model=request.model, label=custom_ent['label']).inc()
-                    
-                    entities.append(Entity(
-                        text=custom_ent['text'],
-                        label=custom_ent['label'],
-                        start=custom_ent['start'],
-                        end=custom_ent['end'],
-                        confidence=custom_ent['confidence']
-                    ))
-                    
-            except Exception as e:
-                log_with_request_id("warning", f"Custom entity ruler failed: {str(e)}")
-        
-        # Remove duplicate entities (keep highest confidence)
+                    entities_extracted.labels(model=model_name, label=custom_entity['label']).inc()
+                    collected_entities.append(custom_entity)
+        except Exception as e:
+            log_with_request_id("warning", f"Custom ruler failed for {model_name}: {e}")
+
+        return collected_entities
+
+    # Model selection logic
+    requested_model_raw = request.model
+    requested_model = (requested_model_raw or 'auto').strip()
+    requested_model_lower = requested_model.lower()
+
+    if requested_model_lower == 'auto':
+        requested_model = 'auto'
+        requested_model_lower = 'auto'
+
+    available_models = [k for k, v in models.items() if v is not None]
+
+    if requested_model_lower != 'auto' and requested_model not in available_models:
+        raise HTTPException(status_code=400, detail=f"Model '{requested_model}' not available. Available: {available_models}")
+
+    try:
+        if requested_model_lower == 'auto':
+            # Auto model selection with escalation logic
+            use_sm = 'en_core_web_sm' in available_models
+            use_trf = 'en_core_web_trf' in available_models
+
+            entities_final = []
+            model_used = None
+
+            if use_sm:
+                # Try fast model first
+                sm_entities = process_with_model('en_core_web_sm')
+                avg_conf = (sum(e['confidence'] for e in sm_entities) / len(sm_entities)) if sm_entities else 1.0
+                low_conf_exists = any(e['confidence'] < float(os.getenv('NER_TRF_ESCALATE_SPAN_CONF', '0.5')) for e in sm_entities)
+
+                # Decide whether to escalate to TRF
+                escalate = False
+                if use_trf:
+                    if len(request.text) >= int(os.getenv('NER_TRF_MIN_CHARS', '500')):
+                        escalate = True
+                    if avg_conf < float(os.getenv('NER_TRF_AVG_CONF', '0.65')):
+                        escalate = True
+                    if low_conf_exists:
+                        escalate = True
+
+                if escalate:
+                    # Use TRF for better accuracy
+                    trf_entities = process_with_model('en_core_web_trf') if use_trf else sm_entities
+                    entities_final = trf_entities
+                    model_used = 'en_core_web_trf' if use_trf else 'en_core_web_sm'
+                else:
+                    entities_final = sm_entities
+                    model_used = 'en_core_web_sm'
+
+            else:
+                # Fallback to TRF if no SM available
+                if 'en_core_web_trf' in available_models:
+                    entities_final = process_with_model('en_core_web_trf')
+                    model_used = 'en_core_web_trf'
+                else:
+                    raise HTTPException(status_code=500, detail='No spaCy models available')
+
+        else:
+            # Use explicitly requested model
+            entities_final = process_with_model(requested_model)
+            model_used = requested_model
+
+        # Deduplicate entities - keep highest confidence for same span
         entity_map = {}
-        for entity in entities:
-            key = (entity.text, entity.start, entity.end)
-            if key not in entity_map or entity.confidence > entity_map[key].confidence:
+        for entity in entities_final:
+            key = (entity['text'], entity['start'], entity['end'])
+            if key not in entity_map or entity['confidence'] > entity_map[key]['confidence']:
                 entity_map[key] = entity
-        
-        entities = list(entity_map.values())
-        
-        # Track text length processed
-        text_length_processed.labels(model=request.model).observe(len(request.text))
-        
+
+        entities_out = [
+            Entity(
+                text=entity_data['text'], 
+                label=entity_data['label'], 
+                start=entity_data['start'], 
+                end=entity_data['end'], 
+                confidence=round(entity_data['confidence'], 3)
+            ) 
+            for entity_data in entity_map.values()
+        ]
+
+        # Record metrics
+        text_length_processed.labels(model=model_used).observe(len(request.text))
         processing_time = (time.time() - start_time) * 1000
-        
+
         return NERResponse(
-            entities=entities,
-            model_used=request.model,
+            entities=entities_out,
+            model_used=model_used,
             processing_time_ms=round(processing_time, 2),
             text_length=len(request.text),
-            entity_count=len(entities)
+            entity_count=len(entities_out)
         )
-        
+
     except Exception as e:
         log_with_request_id("error", f"Error processing text: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing text: {str(e)}")
 
-# Batch NER endpoint
+# Batch processing endpoint
 @app.post("/ner/batch", response_model=BatchNERResponse)
 async def extract_entities_batch(request: BatchNERRequest):
-    """Extract named entities from multiple texts in batch"""
+    """Process multiple texts efficiently using spaCy's batch processing"""
     start_time = time.time()
     
-    # Validate model
+    # Validate requested model
     if request.model not in models or models[request.model] is None:
         raise HTTPException(
             status_code=400, 
@@ -375,8 +420,9 @@ async def extract_entities_batch(request: BatchNERRequest):
     results = []
     
     try:
-        # Process texts in batch for efficiency
         log_with_request_id("debug", f"Processing batch with model={request.model} batch_size={len(request.texts)}")
+        
+        # Use spaCy's efficient batch processing
         docs = list(nlp.pipe(request.texts))
         
         for i, doc in enumerate(docs):
@@ -390,7 +436,6 @@ async def extract_entities_batch(request: BatchNERRequest):
                 if request.labels and ent.label_ not in request.labels:
                     continue
                 
-                # Track entity extraction metrics
                 entities_extracted.labels(model=request.model, label=ent.label_).inc()
                 
                 entities.append(Entity(
@@ -401,13 +446,12 @@ async def extract_entities_batch(request: BatchNERRequest):
                     confidence=confidence
                 ))
             
-            # Track text length processed
             text_length_processed.labels(model=request.model).observe(len(request.texts[i]))
             
             results.append(NERResponse(
                 entities=entities,
                 model_used=request.model,
-                processing_time_ms=0,  # Will be calculated for total
+                processing_time_ms=0,  # Calculated as total batch time
                 text_length=len(request.texts[i]),
                 entity_count=len(entities)
             ))
@@ -424,10 +468,10 @@ async def extract_entities_batch(request: BatchNERRequest):
         log_with_request_id("error", f"Error processing batch: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing batch: {str(e)}")
 
-# Entity labels endpoint
+# Entity labels information endpoint
 @app.get("/labels")
 async def get_entity_labels():
-    """Get available entity labels for the loaded models"""
+    """Get available entity labels and their descriptions"""
     labels = set()
     for model_name, model in models.items():
         if model is not None:
@@ -455,13 +499,18 @@ async def get_entity_labels():
         }
     }
 
-
-# Endpoint to accept circuit-breaker state reports from Node
+# Circuit breaker metrics reporting endpoint
 @app.post('/metrics/report')
 async def metrics_report(payload: Dict[str, Any], request: Request):
-    """Accepts a small JSON payload from the gateway/node service with circuit breaker state.
-    Expected shape: {"event": "open|close|state", "state": {"open": bool, "pending": int, "stats": {...}}, "timestamp": 123456789 }
-    This updates Prometheus gauges so /metrics exposes the CB state.
+    """
+    Accept circuit breaker state reports from the Node.js gateway service.
+    Updates Prometheus gauges so /metrics endpoint exposes circuit breaker state.
+    
+    Expected payload: {
+        "event": "open|close|state", 
+        "state": {"open": bool, "pending": int, "stats": {...}}, 
+        "timestamp": 123456789
+    }
     """
     try:
         event = payload.get('event') if isinstance(payload, dict) else None
@@ -471,32 +520,31 @@ async def metrics_report(payload: Dict[str, Any], request: Request):
         log_with_request_id("debug", f"Received metrics report event={event}")
 
         if isinstance(state, dict):
-            # open/closed
+            # Update circuit breaker open/closed state
             if 'open' in state:
                 try:
                     circuit_breaker_open.set(1 if state.get('open') else 0)
                 except Exception:
                     pass
 
-            # pending
+            # Update pending request count
             if 'pending' in state:
                 try:
                     circuit_breaker_pending.set(int(state.get('pending') or 0))
                 except Exception:
                     pass
 
-            # stats -> failures fallback
+            # Update failure count from stats
             stats = state.get('stats') or {}
             if isinstance(stats, dict):
-                    failures = stats.get('failures') or stats.get('failureCount') or stats.get('failure_count') or stats.get('failure')
-                    if failures is not None:
-                        try:
-                            # Update renamed gauge
-                            circuit_breaker_failures_count.set(float(failures))
-                        except Exception:
-                            pass
+                failures = stats.get('failures') or stats.get('failureCount') or stats.get('failure_count') or stats.get('failure')
+                if failures is not None:
+                    try:
+                        circuit_breaker_failures_count.set(float(failures))
+                    except Exception:
+                        pass
 
-            # Log the incoming request_id (if provided) at info level to allow correlation
+            # Log detailed info for correlation if request_id provided
             if request_id:
                 try:
                     log_with_request_id("info", f"metrics_report: event={event} open={state.get('open') if isinstance(state, dict) else 'n/a'} pending={state.get('pending') if isinstance(state, dict) else 'n/a'}")
