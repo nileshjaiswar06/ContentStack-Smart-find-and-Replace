@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 # Global model storage
 models = {}
+custom_rulers = {}
 
 # Request context storage for correlation IDs
 from contextvars import ContextVar
@@ -79,11 +80,32 @@ async def lifespan(app: FastAPI):
     if not any(models.values()):
         raise RuntimeError("No spaCy models available. Install at least one model.")
     
+    # Initialize custom entity rulers for each model
+    try:
+        from entity_ruler import BrandProductEntityRuler
+        
+        for model_name, nlp in models.items():
+            if nlp is not None:
+                custom_rulers[model_name] = BrandProductEntityRuler(nlp, model_name)
+                logger.info(f"Initialized custom entity ruler for {model_name}")
+        
+        # Load training data if available
+        if os.path.exists("training_data.json"):
+            for ruler in custom_rulers.values():
+                ruler.load_training_data("training_data.json")
+            logger.info("Loaded custom training data")
+            
+    except ImportError as e:
+        logger.warning(f"Could not import custom entity ruler: {e}")
+    except Exception as e:
+        logger.warning(f"Could not initialize custom entity rulers: {e}")
+    
     logger.info("spaCy service ready!")
     yield
     
     # Cleanup on shutdown
     models.clear()
+    custom_rulers.clear()
     logger.info("spaCy service shutdown complete")
 
 # Create FastAPI app
@@ -195,7 +217,7 @@ class Entity(BaseModel):
 
 class NERRequest(BaseModel):
     text: str = Field(..., description="Text to analyze", min_length=1, max_length=100000)
-    model: str = Field("en_core_web_sm", description="Model to use (en_core_web_sm or en_core_web_trf)")
+    model: str = Field("en_core_web_trf", description="Model to use (en_core_web_sm or en_core_web_trf)")
     min_confidence: float = Field(0.5, description="Minimum confidence threshold", ge=0.0, le=1.0)
     labels: Optional[List[str]] = Field(None, description="Filter specific entity labels")
 
@@ -208,7 +230,7 @@ class NERResponse(BaseModel):
 
 class BatchNERRequest(BaseModel):
     texts: List[str] = Field(..., description="List of texts to analyze", max_items=100)
-    model: str = Field("en_core_web_sm", description="Model to use")
+    model: str = Field("en_core_web_trf", description="Model to use")
     min_confidence: float = Field(0.5, description="Minimum confidence threshold")
     labels: Optional[List[str]] = Field(None, description="Filter specific entity labels")
 
@@ -257,6 +279,8 @@ async def extract_entities(request: NERRequest):
         
         # Extract entities with confidence scores
         entities = []
+        
+        # First, extract standard spaCy entities
         for ent in doc.ents:
             # Calculate confidence (spaCy doesn't provide this directly, so we use a heuristic)
             confidence = min(1.0, len(ent.text) / 10.0)  # Longer entities = higher confidence
@@ -279,6 +303,43 @@ async def extract_entities(request: NERRequest):
                 end=ent.end_char,
                 confidence=confidence
             ))
+        
+        # Add custom entities from EntityRuler if available
+        if request.model in custom_rulers:
+            try:
+                custom_entities = custom_rulers[request.model].process_text(request.text)
+                
+                for custom_ent in custom_entities:
+                    # Apply confidence filter
+                    if custom_ent['confidence'] < request.min_confidence:
+                        continue
+                    
+                    # Apply label filter
+                    if request.labels and custom_ent['label'] not in request.labels:
+                        continue
+                    
+                    # Track entity extraction metrics
+                    entities_extracted.labels(model=request.model, label=custom_ent['label']).inc()
+                    
+                    entities.append(Entity(
+                        text=custom_ent['text'],
+                        label=custom_ent['label'],
+                        start=custom_ent['start'],
+                        end=custom_ent['end'],
+                        confidence=custom_ent['confidence']
+                    ))
+                    
+            except Exception as e:
+                log_with_request_id("warning", f"Custom entity ruler failed: {str(e)}")
+        
+        # Remove duplicate entities (keep highest confidence)
+        entity_map = {}
+        for entity in entities:
+            key = (entity.text, entity.start, entity.end)
+            if key not in entity_map or entity.confidence > entity_map[key].confidence:
+                entity_map[key] = entity
+        
+        entities = list(entity_map.values())
         
         # Track text length processed
         text_length_processed.labels(model=request.model).observe(len(request.text))

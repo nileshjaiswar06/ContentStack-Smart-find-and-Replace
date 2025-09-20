@@ -13,13 +13,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Download small spaCy model by default; transformer model optional via build arg
+# spaCy models are installed via requirements.txt
 ARG INSTALL_TRF=false
-RUN python -m spacy download en_core_web_sm
-RUN if [ "$INSTALL_TRF" = "true" ]; then python -m spacy download en_core_web_trf; fi
+ARG TRF_VERSION=3.7.1
+# Install transformer model wheel explicitly when requested. Using the wheel
+# URL is more reliable in non-interactive/container builds than
+# `python -m spacy download` which may attempt to infer an unstable URL.
+RUN if [ "$INSTALL_TRF" = "true" ]; then \
+            pip install --no-cache-dir https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-${TRF_VERSION}/en_core_web_trf-${TRF_VERSION}-py3-none-any.whl ; \
+        fi
 
 # Copy application code
 COPY app.py .
+
+# Copy custom entity ruler and pattern files
+COPY entity_ruler.py .
+COPY brand_product_patterns.json .
+# training_data.json is optional - only copy if it exists
+COPY training_data.json* ./
 
 # Expose port
 EXPOSE 8000

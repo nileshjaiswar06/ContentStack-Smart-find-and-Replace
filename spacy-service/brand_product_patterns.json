@@ -1,0 +1,182 @@
+{
+  "brands": [
+    {
+      "label": "BRAND",
+      "pattern": [{"LOWER": "gemini"}]
+    },
+    {
+      "label": "BRAND", 
+      "pattern": [{"LOWER": "contentstack"}]
+    },
+    {
+      "label": "BRAND",
+      "pattern": [{"LOWER": "google"}]
+    },
+    {
+      "label": "BRAND",
+      "pattern": [{"LOWER": "microsoft"}]
+    },
+    {
+      "label": "BRAND",
+      "pattern": [{"LOWER": "apple"}]
+    },
+    {
+      "label": "BRAND",
+      "pattern": [{"LOWER": "amazon"}]
+    },
+    {
+      "label": "BRAND",
+      "pattern": [{"LOWER": "netflix"}]
+    },
+    {
+      "label": "BRAND",
+      "pattern": [{"LOWER": "spotify"}]
+    },
+    {
+      "label": "BRAND",
+      "pattern": [{"LOWER": "adobe"}]
+    },
+    {
+      "label": "BRAND",
+      "pattern": [{"LOWER": "salesforce"}]
+    },
+    {
+      "label": "BRAND",
+      "pattern": [{"LOWER": "openai"}]
+    },
+    {
+      "label": "BRAND",
+      "pattern": [{"LOWER": "anthropic"}]
+    },
+    {
+      "label": "BRAND",
+      "pattern": [{"LOWER": "meta"}]
+    },
+    {
+      "label": "BRAND",
+      "pattern": [{"LOWER": "facebook"}]
+    },
+    {
+      "label": "BRAND",
+      "pattern": [{"LOWER": "twitter"}]
+    },
+    {
+      "label": "BRAND",
+      "pattern": [{"LOWER": "x"}]
+    },
+    {
+      "label": "BRAND",
+      "pattern": [{"LOWER": "linkedin"}]
+    },
+    {
+      "label": "BRAND",
+      "pattern": [{"LOWER": "youtube"}]
+    },
+    {
+      "label": "BRAND",
+      "pattern": [{"LOWER": "tiktok"}]
+    },
+    {
+      "label": "BRAND",
+      "pattern": [{"LOWER": "instagram"}]
+    }
+  ],
+  "products": [
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "gemini"}, {"LOWER": "pro"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "gemini"}, {"LOWER": "flash"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "gemini"}, {"LOWER": "2.0"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "chatgpt"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "gpt"}, {"LOWER": "4"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "gpt"}, {"LOWER": "3.5"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "claude"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "claude"}, {"LOWER": "3"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "midjourney"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "dall-e"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "photoshop"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "illustrator"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "premiere"}, {"LOWER": "pro"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "after"}, {"LOWER": "effects"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "figma"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "sketch"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "notion"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "slack"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "teams"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "zoom"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "wordpress"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "shopify"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "stripe"}]
+    },
+    {
+      "label": "PRODUCT",
+      "pattern": [{"LOWER": "paypal"}]
+    }
+  ]
+}
