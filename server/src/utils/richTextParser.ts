@@ -1,4 +1,5 @@
 import { replaceWithCase } from "./text.js";
+import { canonicalizeUrl } from "./urlCanonicalizer.js";
 
 type Node = Record<string, any>;
 
@@ -19,7 +20,7 @@ function countMatches(text: string, rx: RegExp): number {
  * Special handling for link nodes: if the href contains the match OR the inner text contains it,
  * replace both, but count as the number of matches total.
  */
-function walkAndReplaceImmutable(node: any, rx: RegExp, replacement: string): { node: any; count: number } {
+function walkAndReplaceImmutable(node: any, rx: RegExp, replacement: string, options: { updateUrls?: boolean } = {}): { node: any; count: number } {
   if (!node) return { node, count: 0 };
 
   const out: any = { ...node };
@@ -38,7 +39,17 @@ function walkAndReplaceImmutable(node: any, rx: RegExp, replacement: string): { 
   if (out.attrs && typeof out.attrs.href === "string") {
     const hrefMatches = countMatches(out.attrs.href, rx);
     if (hrefMatches > 0) {
-      out.attrs = { ...out.attrs, href: out.attrs.href.replace(rx, replacement) };
+      // perform replacement
+      let newHref = out.attrs.href.replace(rx, replacement);
+      // canonicalize if urls should be updated
+      if (options.updateUrls) {
+        try {
+          newHref = canonicalizeUrl(newHref);
+        } catch (err) {
+          // keep newHref if canonicalization fails
+        }
+      }
+      out.attrs = { ...out.attrs, href: newHref };
       count += hrefMatches;
     }
   }
@@ -49,7 +60,7 @@ function walkAndReplaceImmutable(node: any, rx: RegExp, replacement: string): { 
     const kids = out[key] || [];
     const newKids: any[] = [];
     for (const child of kids) {
-      const res = walkAndReplaceImmutable(child, rx, replacement);
+  const res = walkAndReplaceImmutable(child, rx, replacement, options);
       newKids.push(res.node);
       count += res.count;
     }
@@ -62,20 +73,20 @@ function walkAndReplaceImmutable(node: any, rx: RegExp, replacement: string): { 
 /**
  * Immutable replacement on a rich text document. Returns { doc: newDoc, count }
  */
-export function replaceInRteDocImmutable(doc: any, rx: RegExp, replacement: string): { doc: any; count: number } {
+export function replaceInRteDocImmutable(doc: any, rx: RegExp, replacement: string, options: { updateUrls?: boolean } = {}): { doc: any; count: number } {
   if (!doc) return { doc, count: 0 };
   if (Array.isArray(doc)) {
     const newDocs: any[] = [];
     let total = 0;
     for (const n of doc) {
-      const res = walkAndReplaceImmutable(n, rx, replacement);
+      const res = walkAndReplaceImmutable(n, rx, replacement, options);
       newDocs.push(res.node);
       total += res.count;
     }
     return { doc: newDocs, count: total };
   }
   if (doc.content || doc.children) {
-    const res = walkAndReplaceImmutable(doc, rx, replacement);
+    const res = walkAndReplaceImmutable(doc, rx, replacement, options);
     return { doc: res.node, count: res.count };
   }
   return { doc, count: 0 };

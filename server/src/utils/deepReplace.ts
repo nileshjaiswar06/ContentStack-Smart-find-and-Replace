@@ -1,5 +1,6 @@
 import { replaceWithCase } from "./text.js";
 import { replaceInRteDocImmutable } from "./richTextParser.js";
+import { canonicalizeUrlsInText } from "./urlCanonicalizer.js";
 import { logger } from "./logger.js";
 import { normalizeEntryForProcessing } from "../services/contentstackService.js";
 
@@ -32,10 +33,24 @@ export function deepReplace(
       if (!updateUrls && URL_PATTERN.test(value)) return value;
       if (!updateEmails && EMAIL_PATTERN.test(value)) return value;
 
-      const matches = countMatches(value, rx);
-      if (matches === 0) return value;
+      let target = value;
+
+      // If updateUrls is true, canonicalize any absolute URLs after replacement
+      const matches = countMatches(target, rx);
+      if (matches === 0) return target;
+
       replacedCount += matches;
-      return replaceWithCase(value, rx, replacement, true);
+      target = replaceWithCase(target, rx, replacement, true);
+
+      if (updateUrls) {
+        try {
+          target = canonicalizeUrlsInText(target);
+        } catch (err) {
+          // ignore canonicalization errors and keep replaced text
+        }
+      }
+
+      return target;
     }
 
     if (Array.isArray(value)) {
@@ -45,7 +60,9 @@ export function deepReplace(
     if (typeof value === "object") {
       // Detect RTE by content/children keys
       if (value && (value.content || value.children || value.nodeType)) {
-        const { doc: newRte, count } = replaceInRteDocImmutable(value, rx, replacement);
+        const { doc: newRte, count } = replaceInRteDocImmutable(value, rx, replacement, {
+          updateUrls: updateUrls
+        });
         replacedCount += count;
         return newRte;
       }
