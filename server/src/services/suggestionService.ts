@@ -226,11 +226,11 @@ export async function suggestReplacementsForText(
           );
           
           if (meetsThreshold(suggestion)) {
-            // replace existing or push
-            const idx = suggestions.findIndex(s => s.entity.text === ai.originalText);
-            if (idx >= 0) {
+          // replace existing or push
+          const idx = suggestions.findIndex(s => s.entity.text === ai.originalText);
+          if (idx >= 0) {
               suggestions[idx] = suggestion;
-            } else {
+          } else {
               suggestions.push(suggestion);
             }
           }
