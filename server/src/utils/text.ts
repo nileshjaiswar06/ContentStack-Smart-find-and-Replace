@@ -1,13 +1,10 @@
-/**
- * Escape regex special characters if we are doing literal search
- */
+
+ //Escape regex special characters if we are doing literal search
 export function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/**
- * Build regex safely (literal or regex mode)
- */
+// Build regex safely (literal or regex mode)
 export function buildRegex(
   find: string,
   mode: "literal" | "regex" = "literal",
@@ -36,9 +33,7 @@ export function preserveCase(source: string, replacement: string): string {
   return replacement;
 }
 
-/**
- * Replace text with optional case preservation
- */
+ // Replace text with optional case preservation
 export function replaceWithCase(
   text: string,
   rx: RegExp,

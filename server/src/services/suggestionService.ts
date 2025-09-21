@@ -7,6 +7,11 @@ import {
   adjustConfidenceForDomain, 
   getSourcePriority 
 } from "../config/suggestionConfig.js";
+import { scoringService, type ScoringMetrics } from "./scoringService.js";
+import { adaptiveDomainService, type DomainContext } from "./adaptiveDomainService.js";
+import { performanceOptimizationService } from "./performanceOptimizationService.js";
+import { dynamicConfigurationService } from "./dynamicConfigurationService.js";
+import { feedbackLearningService } from "./feedbackLearningService.js";
 import { logger } from "../utils/logger.js";
 
 export type ReplacementSuggestion = {
@@ -19,13 +24,65 @@ export type ReplacementSuggestion = {
   relevanceScore?: number; // Combined ranking score
   domainAdjustedConfidence?: number; // Confidence after domain adjustments
   autoApply?: boolean; // Whether this suggestion can be auto-applied
+  scoringMetrics?: ScoringMetrics; // Detailed scoring breakdown
+  scoreExplanation?: string[]; // Human-readable scoring explanation
+  domainContext?: DomainContext; // Domain-specific context
+  suggestionId?: string; // Unique ID for feedback tracking
 };
+
+
+// Record user feedback for a suggestion to improve future recommendations
+export async function recordSuggestionFeedback(
+  suggestionId: string,
+  suggestion: ReplacementSuggestion,
+  feedback: {
+    action: 'accept' | 'reject' | 'modify' | 'ignore' | 'undo';
+    userId?: string;
+    modifiedText?: string;
+    sessionId?: string;
+    context?: {
+      contentTypeUid?: string;
+      entryUid?: string;
+    };
+    metadata?: Record<string, any>;
+  }
+): Promise<void> {
+  try {
+    const feedbackData: any = {
+      suggestionId,
+      action: feedback.action,
+      suggestion
+    };
+
+    // Only include optional properties if they have values
+    if (feedback.userId) feedbackData.userId = feedback.userId;
+    if (feedback.modifiedText) feedbackData.modifiedText = feedback.modifiedText;
+    if (feedback.sessionId) feedbackData.sessionId = feedback.sessionId;
+    if (feedback.context?.contentTypeUid) feedbackData.contentTypeUid = feedback.context.contentTypeUid;
+    if (feedback.context?.entryUid) feedbackData.entryUid = feedback.context.entryUid;
+    if (feedback.metadata) feedbackData.metadata = feedback.metadata;
+
+    await feedbackLearningService.recordFeedback(feedbackData);
+
+    logger.info("Suggestion feedback recorded", {
+      suggestionId,
+      action: feedback.action,
+      userId: feedback.userId
+    });
+  } catch (error: any) {
+    logger.error("Failed to record suggestion feedback", {
+      suggestionId,
+      error: error.message
+    });
+  }
+}
 
 export async function suggestReplacementsForText(
   text: string,
   context?: {
     contentTypeUid?: string;
     entryUid?: string;
+    userId?: string;
     replacementRule?: {
       find: string;
       replace: string;
@@ -33,120 +90,73 @@ export async function suggestReplacementsForText(
     };
     preferredBrands?: string[];
   },
-    requestId?: string
+  requestId?: string
 ): Promise<ReplacementSuggestion[]> {
-  const config = getSuggestionConfig();
-  logger.info("Generating replacement suggestions", {
+  // Use dynamic configuration based on request context
+  const config = dynamicConfigurationService.getConfigForRequest({
+    userId: context?.userId,
+    sessionId: requestId
+  });
+  
+  // Use performance optimization service for caching and parallel processing
+  return await performanceOptimizationService.optimizedSuggestReplacements(
+    async (text: string, context: any, requestId?: string) => {
+      return await generateSuggestionsCore(text, context, requestId, config);
+    },
+    text,
+    context,
+    requestId
+  );
+}
+
+async function generateSuggestionsCore(
+  text: string,
+  context: any,
+  requestId: string | undefined,
+  config: any
+): Promise<ReplacementSuggestion[]> {
+  const startTime = Date.now();
+  
+  logger.info("Generating replacement suggestions with advanced processing", {
     requestId,
     textLength: text.length,
     context: context?.contentTypeUid,
+    userId: context?.userId,
     config: {
       maxTotal: config.maxSuggestions.total,
       minThreshold: config.thresholds.minimum
     }
   });
 
-  // 1) First do lightweight NER-based heuristics
+  // 1) Domain detection and mapping
+  const domainContext = adaptiveDomainService.detectAndMapDomains(text, {
+    ...(context?.contentTypeUid && { contentTypeUid: context.contentTypeUid }),
+    ...(context?.entryUid && { entryUid: context.entryUid }),
+    ...(context?.userId && { metadata: { userId: context.userId } })
+  });
+
+  // Auto-detect new domains if needed
+  const detectedNewDomains = adaptiveDomainService.autoDetectNewDomains([], context);
+  if (detectedNewDomains.length > 0) {
+    logger.info("New domains detected during processing", { 
+      requestId, 
+      newDomains: detectedNewDomains 
+    });
+  }
+
+  // 2) Named Entity Recognition
   const entities = extractNamedEntitiesFromText(text);
   const suggestions: ReplacementSuggestion[] = [];
 
+  // 3) Generate heuristic suggestions with domain-aware processing
   for (const entity of entities) {
-    if (entity.type === "Email") {
-      const suggestion: ReplacementSuggestion = { 
-        entity, 
-        suggestedReplacement: "contact@yourcompany.com", 
-        confidence: 0.6, 
-        reason: "Suggest default contact pattern",
-        source: "heuristic",
-        context: "Email standardization"
-      };
-      
-      // Apply domain adjustment
-      suggestion.domainAdjustedConfidence = adjustConfidenceForDomain(
-        suggestion.confidence, 
-        entity.type, 
-        suggestion.context
-      );
-      
-      if (meetsThreshold(suggestion)) {
-        suggestions.push(suggestion);
-      }
-      continue;
-    }
-    
-    if (entity.type === "Version") {
-      // heuristic bump version
-      const parts = entity.text.split(".").map((p) => Number(p));
-      const [major, minor, patch] = parts;
-      if (major !== undefined && minor !== undefined && !Number.isNaN(minor)) {
-        const suggested = `${major}.${minor + 1}${patch !== undefined ? "." + patch : ""}`;
-        const suggestion: ReplacementSuggestion = { 
-          entity, 
-          suggestedReplacement: suggested, 
-          confidence: 0.5, 
-          reason: "Suggest next minor version",
-          source: "heuristic",
-          context: "Version increment"
-        };
-        
-        suggestion.domainAdjustedConfidence = adjustConfidenceForDomain(
-          suggestion.confidence, 
-          entity.type, 
-          suggestion.context
-        );
-        
-        if (meetsThreshold(suggestion)) {
-          suggestions.push(suggestion);
-        }
-        continue;
-      }
-    }
-    
-    if (entity.type === "URL") {
-      const suggestion: ReplacementSuggestion = { 
-        entity, 
-        suggestedReplacement: entity.text.replace(/^http:\/\//, "https://"), 
-        confidence: 0.7, 
-        reason: "Upgrade HTTP to HTTPS",
-        source: "heuristic",
-        context: "URL security upgrade"
-      };
-      
-      suggestion.domainAdjustedConfidence = adjustConfidenceForDomain(
-        suggestion.confidence, 
-        entity.type, 
-        suggestion.context
-      );
-      
-      // Only suggest if it's actually an HTTP URL
-      if (entity.text.startsWith("http://") && meetsThreshold(suggestion)) {
-        suggestions.push(suggestion);
-      }
-      continue;
-    }
-    
-    // fallback - only add if it meets minimum threshold
-    const fallbackSuggestion: ReplacementSuggestion = { 
-      entity, 
-      suggestedReplacement: entity.text, 
-      confidence: 0.1, 
-      reason: "No strong suggestion available",
-      source: "heuristic",
-      context: "Generic entity detection"
-    };
-    
-    fallbackSuggestion.domainAdjustedConfidence = adjustConfidenceForDomain(
-      fallbackSuggestion.confidence, 
-      entity.type, 
-      fallbackSuggestion.context
-    );
-    
-    if (meetsThreshold(fallbackSuggestion)) {
-      suggestions.push(fallbackSuggestion);
+    const heuristicSuggestion = await generateHeuristicSuggestion(entity, domainContext);
+    if (heuristicSuggestion && meetsThreshold(heuristicSuggestion)) {
+      suggestions.push(heuristicSuggestion);
     }
   }
 
-  // 2) Generate brandkit suggestions
+  // 4) Generate brandkit suggestions
   try {
     const brandkitResults = await generateBrandkitSuggestions(text, {
       ...(context?.contentTypeUid && { contentTypeUid: context.contentTypeUid }),
@@ -159,23 +169,9 @@ export async function suggestReplacementsForText(
       count: brandkitResults.length 
     });
 
-    // Convert brandkit suggestions to our format
+    // Convert brandkit suggestions with advanced processing
     for (const brandkit of brandkitResults.slice(0, config.maxSuggestions.brandkit)) {
-      const suggestion: ReplacementSuggestion = {
-        entity: { text: brandkit.originalText, type: "Other" } as NamedEntity,
-        suggestedReplacement: brandkit.suggestedReplacement,
-        confidence: brandkit.confidence,
-        reason: brandkit.reason,
-        source: "brandkit",
-        context: brandkit.context
-      };
-      
-      suggestion.domainAdjustedConfidence = adjustConfidenceForDomain(
-        suggestion.confidence, 
-        "brand", 
-        suggestion.context
-      );
-      
+      const suggestion = await createBrandkitSuggestion(brandkit, domainContext);
       if (meetsThreshold(suggestion)) {
         suggestions.push(suggestion);
       }
@@ -187,7 +183,7 @@ export async function suggestReplacementsForText(
     });
   }
 
-  // 3) Optionally call AI for smarter suggestions (non-blocking attempt)
+  // 5) Generate AI suggestions with contextual awareness
   if (isAiServiceAvailable()) {
     try {
       const aiResults = await askAIForSuggestions(text, {
@@ -204,33 +200,13 @@ export async function suggestReplacementsForText(
           textLength: text.length 
         });
 
-        // merge by matching originalText → overwrite or add
         for (const ai of aiResults.slice(0, config.maxSuggestions.ai)) {
-          const match = suggestions.find(s => s.entity.text === ai.originalText);
-          const suggestion: ReplacementSuggestion = {
-            entity: match ? match.entity : ({ 
-              text: ai.originalText, 
-              type: "Other"
-            } as NamedEntity),
-            suggestedReplacement: ai.suggestedReplacement,
-            confidence: ai.confidence ?? 0.7,
-            reason: ai.reason || "AI-generated suggestion",
-            source: "ai",
-            context: ai.context || "AI-generated suggestion"
-          };
-          
-          suggestion.domainAdjustedConfidence = adjustConfidenceForDomain(
-            suggestion.confidence, 
-            "Other", 
-            suggestion.context
-          );
-          
+          const suggestion = await createAISuggestion(ai, entities, domainContext);
           if (meetsThreshold(suggestion)) {
-          // replace existing or push
-          const idx = suggestions.findIndex(s => s.entity.text === ai.originalText);
-          if (idx >= 0) {
-              suggestions[idx] = suggestion;
-          } else {
+            const existingIndex = suggestions.findIndex(s => s.entity.text === ai.originalText);
+            if (existingIndex >= 0) {
+              suggestions[existingIndex] = suggestion;
+            } else {
               suggestions.push(suggestion);
             }
           }
@@ -245,7 +221,7 @@ export async function suggestReplacementsForText(
     }
   }
 
-  // 4) Generate contextual replacements if we have a replacement rule
+  // 6) Generate contextual replacements
   if (context?.replacementRule && isAiServiceAvailable()) {
     try {
       const contextualResults = await generateContextualReplacements(
@@ -254,7 +230,7 @@ export async function suggestReplacementsForText(
         {
           ...(context.contentTypeUid && { contentTypeUid: context.contentTypeUid }),
           ...(context.entryUid && { entryUid: context.entryUid }),
-          surroundingText: text.substring(0, 200) // First 200 chars for context
+          surroundingText: text.substring(0, 200)
         }
       );
 
@@ -264,26 +240,8 @@ export async function suggestReplacementsForText(
           count: contextualResults.length 
         });
 
-        // Add contextual suggestions
         for (const contextual of contextualResults.slice(0, config.maxSuggestions.contextual)) {
-          const suggestion: ReplacementSuggestion = {
-            entity: { 
-              text: contextual.originalText, 
-              type: "Other"
-            } as NamedEntity,
-            suggestedReplacement: contextual.suggestedReplacement,
-            confidence: contextual.confidence ?? 0.6,
-            reason: contextual.reason || "Contextual alternative",
-            source: "contextual",
-            context: contextual.context || "Contextual replacement"
-          };
-          
-          suggestion.domainAdjustedConfidence = adjustConfidenceForDomain(
-            suggestion.confidence, 
-            "Other", 
-            suggestion.context
-          );
-          
+          const suggestion = await createContextualSuggestion(contextual, domainContext);
           if (meetsThreshold(suggestion)) {
             suggestions.push(suggestion);
           }
@@ -297,18 +255,34 @@ export async function suggestReplacementsForText(
     }
   }
 
-  // 5) Calculate relevance scores and apply sophisticated ranking
-  const rankedSuggestions = calculateRelevanceAndRank(suggestions, text, context);
+  // 7) Advanced ranking and scoring
+  const extendedContext = {
+    ...context,
+    originalText: text,
+    domainContext,
+    previousSuggestions: suggestions
+  };
+
+  const rankedSuggestions = scoringService.rankSuggestions(suggestions, text, extendedContext);
   
-  // 6) Limit to max total suggestions
+  // 8) Apply final limits and filtering
   const finalSuggestions = rankedSuggestions.slice(0, config.maxSuggestions.total);
   
-  logger.info("Final suggestions generated", {
+  const endTime = Date.now();
+  const processingTime = endTime - startTime;
+
+  logger.info("Advanced suggestions generation completed", {
     requestId,
     totalProcessed: suggestions.length,
     finalCount: finalSuggestions.length,
+    processingTime,
     averageConfidence: finalSuggestions.reduce((sum, s) => sum + s.confidence, 0) / finalSuggestions.length,
-    sourceBreakdown: getSourceBreakdown(finalSuggestions)
+    averageRelevanceScore: finalSuggestions.reduce((sum, s) => sum + (s.relevanceScore || 0), 0) / finalSuggestions.length,
+    sourceBreakdown: getSourceBreakdown(finalSuggestions),
+    domainContext: {
+      industry: domainContext.industry,
+      detectedDomains: detectedNewDomains
+    }
   });
 
   return finalSuggestions;
@@ -503,6 +477,188 @@ function calculateContextAlignment(
   }
   
   return Math.min(alignment, 1.0);
+}
+
+// Helper functions for creating enhanced suggestions
+
+async function generateHeuristicSuggestion(
+  entity: NamedEntity, 
+  domainContext: DomainContext
+): Promise<ReplacementSuggestion | null> {
+  let suggestion: ReplacementSuggestion | null = null;
+
+  if (entity.type === "Email") {
+    suggestion = { 
+      entity, 
+      suggestedReplacement: "contact@yourcompany.com", 
+      confidence: 0.6, 
+      reason: "Suggest default contact pattern",
+      source: "heuristic",
+      context: "Email standardization",
+      domainContext
+    };
+  } else if (entity.type === "Version") {
+    const parts = entity.text.split(".").map((p) => Number(p));
+    const [major, minor, patch] = parts;
+    if (major !== undefined && minor !== undefined && !Number.isNaN(minor)) {
+      const suggested = `${major}.${minor + 1}${patch !== undefined ? "." + patch : ""}`;
+      suggestion = { 
+        entity, 
+        suggestedReplacement: suggested, 
+        confidence: 0.5, 
+        reason: "Suggest next minor version",
+        source: "heuristic",
+        context: "Version increment",
+        domainContext
+      };
+    }
+  } else if (entity.type === "URL") {
+    if (entity.text.startsWith("http://")) {
+      suggestion = { 
+        entity, 
+        suggestedReplacement: entity.text.replace(/^http:\/\//, "https://"), 
+        confidence: 0.7, 
+        reason: "Upgrade HTTP to HTTPS",
+        source: "heuristic",
+        context: "URL security upgrade",
+        domainContext
+      };
+    }
+  }
+
+  if (suggestion) {
+    // Apply domain adjustment
+    const domainAdjustment = adaptiveDomainService.calculateDomainAdjustment(suggestion, domainContext);
+    suggestion.domainAdjustedConfidence = Math.min(suggestion.confidence * domainAdjustment, 1.0);
+
+    // Apply advanced scoring
+    const scoring = scoringService.calculateAdvancedRelevanceScore(suggestion, entity.text, {});
+    suggestion.relevanceScore = scoring.score;
+    suggestion.scoringMetrics = scoring.metrics;
+    suggestion.scoreExplanation = scoring.explanation;
+
+    // Determine auto-apply
+    const adaptiveThreshold = adaptiveDomainService.getAdaptiveThreshold(
+      domainContext.industry || 'general', 
+      entity.type
+    );
+    suggestion.autoApply = (suggestion.domainAdjustedConfidence || suggestion.confidence) >= adaptiveThreshold;
+  }
+
+  return suggestion;
+}
+
+async function createBrandkitSuggestion(
+  brandkit: BrandkitSuggestion, 
+  domainContext: DomainContext
+): Promise<ReplacementSuggestion> {
+  const suggestion: ReplacementSuggestion = {
+    entity: { text: brandkit.originalText, type: "Other" } as NamedEntity,
+    suggestedReplacement: brandkit.suggestedReplacement,
+    confidence: brandkit.confidence,
+    reason: brandkit.reason,
+    source: "brandkit",
+    context: brandkit.context,
+    domainContext
+  };
+
+  // Apply domain adjustment
+  const domainAdjustment = adaptiveDomainService.calculateDomainAdjustment(suggestion, domainContext);
+  suggestion.domainAdjustedConfidence = Math.min(suggestion.confidence * domainAdjustment, 1.0);
+
+  // Apply advanced scoring
+  const scoring = scoringService.calculateAdvancedRelevanceScore(suggestion, brandkit.originalText, {});
+  suggestion.relevanceScore = scoring.score;
+  suggestion.scoringMetrics = scoring.metrics;
+  suggestion.scoreExplanation = scoring.explanation;
+
+  // Generate unique suggestion ID
+  suggestion.suggestionId = `brandkit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+  // Determine auto-apply
+  const adaptiveThreshold = adaptiveDomainService.getAdaptiveThreshold(
+    domainContext.industry || 'general', 
+    'brand'
+  );
+  suggestion.autoApply = (suggestion.domainAdjustedConfidence || suggestion.confidence) >= adaptiveThreshold;
+
+  return suggestion;
+}
+
+async function createAISuggestion(
+  ai: { originalText: string; suggestedReplacement: string; confidence?: number; reason?: string; context?: string },
+  entities: NamedEntity[],
+  domainContext: DomainContext
+): Promise<ReplacementSuggestion> {
+  const match = entities.find(e => e.text === ai.originalText);
+  const suggestion: ReplacementSuggestion = {
+    entity: match || ({ text: ai.originalText, type: "Other" } as NamedEntity),
+    suggestedReplacement: ai.suggestedReplacement,
+    confidence: ai.confidence ?? 0.7,
+    reason: ai.reason || "AI-generated suggestion",
+    source: "ai",
+    context: ai.context || "AI-generated suggestion",
+    domainContext
+  };
+
+  // Apply domain adjustment
+  const domainAdjustment = adaptiveDomainService.calculateDomainAdjustment(suggestion, domainContext);
+  suggestion.domainAdjustedConfidence = Math.min(suggestion.confidence * domainAdjustment, 1.0);
+
+  // Apply advanced scoring
+  const scoring = scoringService.calculateAdvancedRelevanceScore(suggestion, ai.originalText, {});
+  suggestion.relevanceScore = scoring.score;
+  suggestion.scoringMetrics = scoring.metrics;
+  suggestion.scoreExplanation = scoring.explanation;
+
+  // Generate unique suggestion ID
+  suggestion.suggestionId = `ai_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+  // Determine auto-apply
+  const adaptiveThreshold = adaptiveDomainService.getAdaptiveThreshold(
+    domainContext.industry || 'general', 
+    suggestion.entity.type
+  );
+  suggestion.autoApply = (suggestion.domainAdjustedConfidence || suggestion.confidence) >= adaptiveThreshold;
+
+  return suggestion;
+}
+
+async function createContextualSuggestion(
+  contextual: { originalText: string; suggestedReplacement: string; confidence?: number; reason?: string; context?: string },
+  domainContext: DomainContext
+): Promise<ReplacementSuggestion> {
+  const suggestion: ReplacementSuggestion = {
+    entity: { text: contextual.originalText, type: "Other" } as NamedEntity,
+    suggestedReplacement: contextual.suggestedReplacement,
+    confidence: contextual.confidence ?? 0.6,
+    reason: contextual.reason || "Contextual alternative",
+    source: "contextual",
+    context: contextual.context || "Contextual replacement",
+    domainContext
+  };
+
+  // Apply domain adjustment
+  const domainAdjustment = adaptiveDomainService.calculateDomainAdjustment(suggestion, domainContext);
+  suggestion.domainAdjustedConfidence = Math.min(suggestion.confidence * domainAdjustment, 1.0);
+
+  // Apply advanced scoring
+  const scoring = scoringService.calculateAdvancedRelevanceScore(suggestion, contextual.originalText, {});
+  suggestion.relevanceScore = scoring.score;
+  suggestion.scoringMetrics = scoring.metrics;
+  suggestion.scoreExplanation = scoring.explanation;
+
+  // Generate unique suggestion ID
+  suggestion.suggestionId = `contextual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+  // Determine auto-apply
+  const adaptiveThreshold = adaptiveDomainService.getAdaptiveThreshold(
+    domainContext.industry || 'general', 
+    'contextual'
+  );
+  suggestion.autoApply = (suggestion.domainAdjustedConfidence || suggestion.confidence) >= adaptiveThreshold;
+
+  return suggestion;
 }
 
 // Get source breakdown for logging

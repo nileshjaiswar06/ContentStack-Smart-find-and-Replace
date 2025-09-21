@@ -135,9 +135,9 @@ async function callGemini(prompt: string, maxTokens = 500, requestId?: string): 
   }
 }
 
-/**
- * Generate AI-powered replacement suggestions for text content
- */
+
+// Generate AI-powered replacement suggestions for text content
+
 export async function askAIForSuggestions(
   text: string, 
   context?: {
@@ -274,9 +274,8 @@ IMPORTANT:
   }
 }
 
-/**
- * Generate contextual replacement suggestions for specific replacement rules
- */
+
+ // Generate contextual replacement suggestions for specific replacement rules
 export async function generateContextualReplacements(
   findText: string,
   replaceText: string,
@@ -329,16 +328,12 @@ Return JSON array with originalText, suggestedReplacement, confidence, reason, a
   }
 }
 
-/**
- * Check if AI service is available and configured
- */
+// Check if AI service is available and configured
 export function isAiServiceAvailable(): boolean {
   return AI_PROVIDER === "gemini" && !!GEMINI_API_KEY;
 }
 
-/**
- * Get AI service status and configuration
- */
+// Get AI service status and configuration
 export function getAiServiceStatus() {
   return {
     provider: AI_PROVIDER,

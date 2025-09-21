@@ -74,9 +74,8 @@ class PerformanceOptimizationService {
     this.initializeService();
   }
 
-  /**
-   * Optimized suggestion generation with caching and parallel processing
-   */
+
+  // Optimized suggestion generation with caching and parallel processing
   async optimizedSuggestReplacements(
     suggestionFunction: Function,
     text: string,
@@ -125,9 +124,7 @@ class PerformanceOptimizationService {
     }
   }
 
-  /**
-   * Batch process multiple suggestion requests for efficiency
-   */
+  // Batch process multiple suggestion requests for efficiency
   async batchSuggestReplacements(
     suggestionFunction: Function,
     requests: Array<{
@@ -203,9 +200,7 @@ class PerformanceOptimizationService {
     return results;
   }
 
-  /**
-   * Parallel processing for CPU-intensive operations
-   */
+  // Parallel processing for CPU-intensive operations
   async parallelProcess<T>(
     taskFunction: Function,
     data: T[],
@@ -258,9 +253,7 @@ class PerformanceOptimizationService {
     }
   }
 
-  /**
-   * Intelligent cache management with LRU eviction
-   */
+  // Intelligent cache management with LRU eviction
   setCache(key: string, value: any, ttl?: number): void {
     const expiry = Date.now() + (ttl || this.config.cacheDefaultTTL);
     const size = this.estimateSize(value);
@@ -287,9 +280,7 @@ class PerformanceOptimizationService {
     });
   }
 
-  /**
-   * Get item from cache with hit tracking
-   */
+  // Get item from cache with hit tracking
   getFromCache(key: string): any | null {
     const entry = this.cache.get(key);
     
@@ -310,9 +301,7 @@ class PerformanceOptimizationService {
     return entry.value;
   }
 
-  /**
-   * Get current performance metrics
-   */
+  // Get current performance metrics
   getPerformanceMetrics(): PerformanceMetrics {
     // Update real-time metrics
     const memUsage = process.memoryUsage();
@@ -323,9 +312,7 @@ class PerformanceOptimizationService {
     return { ...this.metrics };
   }
 
-  /**
-   * Get cache statistics
-   */
+  // Get cache statistics
   getCacheStats(): {
     size: number;
     hitRate: number;
@@ -362,17 +349,13 @@ class PerformanceOptimizationService {
     };
   }
 
-  /**
-   * Clear cache and reset metrics
-   */
+  // Clear cache and reset metrics
   clearCache(): void {
     this.cache.clear();
     logger.info("Cache cleared");
   }
 
-  /**
-   * Optimize cache by removing expired and least used items
-   */
+  // Optimize cache by removing expired and least used items
   optimizeCache(): void {
     const now = Date.now();
     let removedCount = 0;

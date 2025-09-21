@@ -100,9 +100,7 @@ class DynamicConfigurationService extends EventEmitter {
     this.initializeService();
   }
 
-  /**
-   * Update configuration with validation and change tracking
-   */
+  // Update configuration with validation and change tracking
   async updateConfig(
     configPath: string,
     newValue: any,
@@ -193,9 +191,7 @@ class DynamicConfigurationService extends EventEmitter {
     return result;
   }
 
-  /**
-   * Batch update multiple configuration values
-   */
+  // Batch update multiple configuration values
   async batchUpdateConfig(
     updates: Array<{
       path: string;
@@ -256,9 +252,7 @@ class DynamicConfigurationService extends EventEmitter {
     };
   }
 
-  /**
-   * Start an A/B testing experiment with configuration changes
-   */
+  // Start an A/B testing experiment with configuration changes
   async startExperiment(experiment: {
     name: string;
     description: string;
@@ -340,9 +334,7 @@ class DynamicConfigurationService extends EventEmitter {
     return result;
   }
 
-  /**
-   * Get configuration for a specific request (may be experimental)
-   */
+  // Get configuration for a specific request (may be experimental)
   getConfigForRequest(requestContext?: {
     userId?: string | undefined;
     experimentGroup?: string | undefined;
@@ -359,9 +351,7 @@ class DynamicConfigurationService extends EventEmitter {
     return this.currentConfig;
   }
 
-  /**
-   * Enable automatic optimization based on performance metrics
-   */
+  // Enable automatic optimization based on performance metrics
   enableAutoOptimization(options?: {
     interval?: number; // Check interval in ms
     performanceThreshold?: number; // Minimum improvement threshold
@@ -381,9 +371,7 @@ class DynamicConfigurationService extends EventEmitter {
     });
   }
 
-  /**
-   * Disable automatic optimization
-   */
+  // Disable automatic optimization
   disableAutoOptimization(): void {
     this.autoOptimization = false;
     
@@ -395,9 +383,7 @@ class DynamicConfigurationService extends EventEmitter {
     logger.info("Auto-optimization disabled");
   }
 
-  /**
-   * Get configuration history and analytics
-   */
+  // Get configuration history and analytics
   getConfigAnalytics(): {
     totalChanges: number;
     recentChanges: ConfigChange[];
@@ -440,9 +426,7 @@ class DynamicConfigurationService extends EventEmitter {
     };
   }
 
-  /**
-   * Export configuration and history
-   */
+  // Export configuration and history
   async exportConfig(): Promise<string> {
     const dataDir = path.join(process.cwd(), 'data', 'config');
     await fs.mkdir(dataDir, { recursive: true });
@@ -466,9 +450,7 @@ class DynamicConfigurationService extends EventEmitter {
     return filepath;
   }
 
-  /**
-   * Rollback to a previous configuration
-   */
+  // Rollback to a previous configuration
   async rollbackToBackup(backupId: string): Promise<boolean> {
     const backup = this.configBackups.get(backupId);
     if (!backup) {

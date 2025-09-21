@@ -73,9 +73,9 @@ class FeedbackLearningService {
     this.startBackgroundProcessing();
   }
 
-  /**
-   * Record user feedback and trigger learning updates
-   */
+  
+  //  Record user feedback and trigger learning updates
+  
   async recordFeedback(feedback: {
     suggestionId: string;
     userId?: string;
@@ -145,9 +145,7 @@ class FeedbackLearningService {
     });
   }
 
-  /**
-   * Get personalized insights for a specific user
-   */
+  // Get personalized insights for a specific user
   getUserInsights(userId: string): any {
     const userFeedback = this.feedbackHistory.get(userId) || [];
     if (userFeedback.length === 0) {
@@ -229,9 +227,7 @@ class FeedbackLearningService {
     };
   }
 
-  /**
-   * Generate comprehensive learning insights across all users
-   */
+  // Generate comprehensive learning insights across all users
   generateLearningInsights(): LearningInsights {
     const allFeedback: FeedbackEvent[] = [];
     for (const userFeedback of this.feedbackHistory.values()) {
@@ -405,9 +401,7 @@ class FeedbackLearningService {
     };
   }
 
-  /**
-   * Get current model performance metrics
-   */
+  // Get current model performance metrics
   getCurrentPerformance(): ModelPerformance {
     const allFeedback: FeedbackEvent[] = [];
     for (const userFeedback of this.feedbackHistory.values()) {
@@ -455,9 +449,7 @@ class FeedbackLearningService {
     };
   }
 
-  /**
-   * Export learning data for analysis
-   */
+  // Export learning data for analysis
   async exportLearningData(): Promise<string> {
     const dataDir = path.join(process.cwd(), 'data', 'learning');
     await fs.mkdir(dataDir, { recursive: true });
@@ -481,9 +473,7 @@ class FeedbackLearningService {
     return filepath;
   }
 
-  /**
-   * Apply learned optimizations to suggestion configuration
-   */
+  // Apply learned optimizations to suggestion configuration
   async applyLearnings(): Promise<{
     applied: string[];
     skipped: string[];

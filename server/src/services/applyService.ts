@@ -147,9 +147,9 @@ export function applySuggestionsToDoc(
   };
 }
 
-/**
- * Preview suggestions without applying them
- */
+
+ // Preview suggestions without applying them
+
 export function previewSuggestions(
   doc: any, 
   suggestions: ReplacementSuggestion[], 

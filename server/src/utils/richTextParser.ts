@@ -15,7 +15,7 @@ function countMatches(text: string, rx: RegExp): number {
   return Array.from(text.matchAll(clone)).length;
 }
 
-/**
+/*
  * Walks a node immutably, returning { node: newNode, count: number }
  * Special handling for link nodes: if the href contains the match OR the inner text contains it,
  * replace both, but count as the number of matches total.
@@ -70,9 +70,9 @@ function walkAndReplaceImmutable(node: any, rx: RegExp, replacement: string, opt
   return { node: out, count };
 }
 
-/**
- * Immutable replacement on a rich text document. Returns { doc: newDoc, count }
- */
+
+//Immutable replacement on a rich text document. Returns { doc: newDoc, count }
+
 export function replaceInRteDocImmutable(doc: any, rx: RegExp, replacement: string, options: { updateUrls?: boolean } = {}): { doc: any; count: number } {
   if (!doc) return { doc, count: 0 };
   if (Array.isArray(doc)) {

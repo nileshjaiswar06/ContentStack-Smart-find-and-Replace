@@ -8,7 +8,7 @@ export function diffText(before: string, after: string) {
   return diffs.map(([op, text]) => ({ op, text }));
 }
 
-/**
+/*
  * Summarize how many string fields changed between two objects
  * Groups counts by top-level field (demo-friendly)
  */

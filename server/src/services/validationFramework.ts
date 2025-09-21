@@ -91,9 +91,7 @@ class ValidationFramework {
     this.setupValidationRules();
   }
 
-  /**
-   * Run comprehensive validation test suite
-   */
+  // Run comprehensive validation test suite
   async runValidationSuite(
     suggestionFunction: Function,
     options?: {
@@ -148,9 +146,7 @@ class ValidationFramework {
     return report;
   }
 
-  /**
-   * Run A/B testing between two suggestion implementations
-   */
+  // Run A/B testing between two suggestion implementations
   async runABTest(
     functionA: Function,
     functionB: Function,
@@ -207,9 +203,7 @@ class ValidationFramework {
     };
   }
 
-  /**
-   * Real-world validation with live data
-   */
+  // Real-world validation with live data
   async validateRealWorldPerformance(
     suggestionFunction: Function,
     realWorldData: Array<{
@@ -267,17 +261,13 @@ class ValidationFramework {
     return { accuracy, performance, insights };
   }
 
-  /**
-   * Add custom test case
-   */
+  // Add custom test case
   addTestCase(testCase: TestCase): void {
     this.testCases.set(testCase.id, testCase);
     logger.info("Test case added", { id: testCase.id, domain: testCase.metadata.domain });
   }
 
-  /**
-   * Generate test cases from real content
-   */
+  // Generate test cases from real content
   async generateTestCasesFromContent(
     content: Array<{
       text: string;
@@ -323,9 +313,7 @@ class ValidationFramework {
     return generatedCases;
   }
 
-  /**
-   * Export test results for analysis
-   */
+  // Export test results for analysis
   async exportResults(format: 'json' | 'csv' | 'html' = 'json'): Promise<string> {
     const dataDir = path.join(process.cwd(), 'data', 'validation');
     await fs.mkdir(dataDir, { recursive: true });

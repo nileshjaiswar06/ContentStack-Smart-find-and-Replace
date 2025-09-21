@@ -45,9 +45,9 @@ class AdaptiveDomainService {
     this.initializeIndustryMappings();
   }
 
-  /**
-   * Automatically detect and map domains from content
-   */
+  
+  // Automatically detect and map domains from content
+   
   detectAndMapDomains(
     text: string,
     context?: {
@@ -93,9 +93,7 @@ class AdaptiveDomainService {
     return domainContext;
   }
 
-  /**
-   * Get adaptive thresholds for a specific domain and entity type
-   */
+  // Get adaptive thresholds for a specific domain and entity type
   getAdaptiveThreshold(domain: string, entityType: string): number {
     const thresholdKey = `${domain}_${entityType}`;
     const adaptiveThreshold = this.adaptiveThresholds.get(thresholdKey);
@@ -108,9 +106,7 @@ class AdaptiveDomainService {
     return this.getDefaultThreshold(domain, entityType);
   }
 
-  /**
-   * Learn from user feedback and adjust domain mappings
-   */
+  // Learn from user feedback and adjust domain mappings
   learnFromFeedback(
     feedback: UserFeedback,
     suggestion: ReplacementSuggestion,
@@ -128,9 +124,7 @@ class AdaptiveDomainService {
     });
   }
 
-  /**
-   * Generate domain-specific confidence adjustments
-   */
+  // Generate domain-specific confidence adjustments
   calculateDomainAdjustment(
     suggestion: ReplacementSuggestion,
     domainContext: DomainContext
@@ -157,9 +151,7 @@ class AdaptiveDomainService {
     return Math.max(0.1, Math.min(2.0, 1.0 + totalAdjustment));
   }
 
-  /**
-   * Auto-detect new domains from content patterns
-   */
+  // Auto-detect new domains from content patterns
   autoDetectNewDomains(
     suggestions: ReplacementSuggestion[],
     context?: any
@@ -181,9 +173,7 @@ class AdaptiveDomainService {
     return newDomains;
   }
 
-  /**
-   * Get domain-specific validation rules
-   */
+  // Get domain-specific validation rules
   getDomainValidationRules(domain: string): Record<string, any> {
     const rules: Record<string, any> = {
       general: {
@@ -681,9 +671,7 @@ class AdaptiveDomainService {
       .slice(0, 10); // Limit to prevent excessive growth
   }
 
-  /**
-   * Comprehensive threshold validation and auto-calibration
-   */
+  // Comprehensive threshold validation and auto-calibration
   validateAndCalibrateThresholds(): {
     validationResults: ThresholdValidationResult[];
     calibrationActions: CalibrationAction[];
@@ -974,9 +962,7 @@ class AdaptiveDomainService {
     return totalSamples > 0 ? totalPerformance / totalSamples : 0.5;
   }
 
-  /**
-   * Generate performance report for domain thresholds
-   */
+  // Generate performance report for domain thresholds
   generatePerformanceReport(): DomainThresholdReport {
     const domainStats: Record<string, DomainStatistics> = {};
     const globalStats = {
