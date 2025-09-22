@@ -27,7 +27,185 @@ export interface BrandkitSuggestion {
   context: string;
   brandMapping?: BrandMapping;
   productMapping?: ProductMapping;
+  suggestionType?: 'brand_standardization' | 'product_standardization' | 'banned_phrase' | 'tone_style' | 'consistency';
+  severity?: 'low' | 'medium' | 'high' | 'critical';
 }
+
+export interface BannedPhrase {
+  phrase: string;
+  category: 'outdated' | 'offensive' | 'legal' | 'brand_conflict' | 'trademark' | 'inappropriate';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  suggestedReplacement?: string;
+  reason: string;
+  lastUpdated: Date;
+  isActive: boolean;
+}
+
+export interface ToneStyleRule {
+  ruleId: string;
+  name: string;
+  description: string;
+  pattern: string | RegExp;
+  tone: 'formal' | 'casual' | 'professional' | 'friendly' | 'technical' | 'marketing';
+  style: 'concise' | 'detailed' | 'conversational' | 'academic' | 'promotional';
+  severity: 'low' | 'medium' | 'high';
+  suggestedFix: string;
+  isActive: boolean;
+}
+
+export interface BrandkitConfig {
+  bannedPhrases: BannedPhrase[];
+  toneStyleRules: ToneStyleRule[];
+  brandMappings: BrandMapping[];
+  lastUpdated: Date;
+  version: string;
+}
+
+// Default banned phrases - in production this would come from a database or external service
+const DEFAULT_BANNED_PHRASES: BannedPhrase[] = [
+  {
+    phrase: "best of breed",
+    category: "outdated",
+    severity: "medium",
+    suggestedReplacement: "industry-leading",
+    reason: "Outdated business terminology",
+    lastUpdated: new Date(),
+    isActive: true
+  },
+  {
+    phrase: "synergy",
+    category: "outdated",
+    severity: "low",
+    suggestedReplacement: "collaboration",
+    reason: "Overused corporate buzzword",
+    lastUpdated: new Date(),
+    isActive: true
+  },
+  {
+    phrase: "leverage",
+    category: "outdated",
+    severity: "low",
+    suggestedReplacement: "use",
+    reason: "Overused business jargon",
+    lastUpdated: new Date(),
+    isActive: true
+  },
+  {
+    phrase: "disrupt",
+    category: "outdated",
+    severity: "medium",
+    suggestedReplacement: "transform",
+    reason: "Overused tech industry term",
+    lastUpdated: new Date(),
+    isActive: true
+  },
+  {
+    phrase: "paradigm shift",
+    category: "outdated",
+    severity: "high",
+    suggestedReplacement: "significant change",
+    reason: "Overused academic terminology",
+    lastUpdated: new Date(),
+    isActive: true
+  },
+  {
+    phrase: "cutting-edge",
+    category: "outdated",
+    severity: "low",
+    suggestedReplacement: "advanced",
+    reason: "Overused marketing term",
+    lastUpdated: new Date(),
+    isActive: true
+  },
+  {
+    phrase: "revolutionary",
+    category: "outdated",
+    severity: "medium",
+    suggestedReplacement: "innovative",
+    reason: "Overused marketing hyperbole",
+    lastUpdated: new Date(),
+    isActive: true
+  },
+  {
+    phrase: "game-changer",
+    category: "outdated",
+    severity: "high",
+    suggestedReplacement: "significant improvement",
+    reason: "Overused marketing cliché",
+    lastUpdated: new Date(),
+    isActive: true
+  }
+];
+
+// Default tone and style rules
+const DEFAULT_TONE_STYLE_RULES: ToneStyleRule[] = [
+  {
+    ruleId: "avoid-passive-voice",
+    name: "Avoid Passive Voice",
+    description: "Replace passive voice with active voice for clarity",
+    pattern: /\b(was|were|is|are|been|being)\s+\w+ed\b/gi,
+    tone: "professional",
+    style: "concise",
+    severity: "medium",
+    suggestedFix: "Rewrite in active voice",
+    isActive: true
+  },
+  {
+    ruleId: "avoid-contractions",
+    name: "Avoid Contractions in Formal Content",
+    description: "Use full forms instead of contractions in professional content",
+    pattern: /\b(don't|won't|can't|shouldn't|couldn't|wouldn't|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't|doesn't|didn't)\b/gi,
+    tone: "formal",
+    style: "concise",
+    severity: "low",
+    suggestedFix: "Use full forms (do not, will not, cannot, etc.)",
+    isActive: true
+  },
+  {
+    ruleId: "avoid-exclamation-marks",
+    name: "Limit Exclamation Marks",
+    description: "Avoid excessive use of exclamation marks in professional content",
+    pattern: /!{2,}/g,
+    tone: "professional",
+    style: "concise",
+    severity: "low",
+    suggestedFix: "Use single exclamation mark or period",
+    isActive: true
+  },
+  {
+    ruleId: "avoid-all-caps",
+    name: "Avoid All Caps",
+    description: "Avoid using all capital letters for emphasis",
+    pattern: /\b[A-Z]{3,}\b/g,
+    tone: "professional",
+    style: "concise",
+    severity: "medium",
+    suggestedFix: "Use proper emphasis techniques",
+    isActive: true
+  },
+  {
+    ruleId: "avoid-redundant-phrases",
+    name: "Avoid Redundant Phrases",
+    description: "Remove redundant phrases that don't add value",
+    pattern: /\b(completely|totally|absolutely|entirely|wholly)\s+(unique|perfect|complete|finished|done)\b/gi,
+    tone: "professional",
+    style: "concise",
+    severity: "low",
+    suggestedFix: "Remove redundant modifier",
+    isActive: true
+  },
+  {
+    ruleId: "avoid-filler-words",
+    name: "Avoid Filler Words",
+    description: "Remove unnecessary filler words",
+    pattern: /\b(just|simply|basically|actually|really|quite|rather|somewhat|fairly)\s+/gi,
+    tone: "professional",
+    style: "concise",
+    severity: "low",
+    suggestedFix: "Remove filler word",
+    isActive: true
+  }
+];
 
 //  Default brand mappings - in production this would come from a database or external service
 const DEFAULT_BRAND_MAPPINGS: BrandMapping[] = [
@@ -126,7 +304,16 @@ const DEFAULT_BRAND_MAPPINGS: BrandMapping[] = [
 ];
 
 
-// In-memory cache for brand mappings
+// In-memory cache for brandkit configuration
+let brandkitConfig: BrandkitConfig = {
+  bannedPhrases: [...DEFAULT_BANNED_PHRASES],
+  toneStyleRules: [...DEFAULT_TONE_STYLE_RULES],
+  brandMappings: [...DEFAULT_BRAND_MAPPINGS],
+  lastUpdated: new Date(),
+  version: "1.0.0"
+};
+
+// Legacy cache for backward compatibility
 let brandMappingsCache: BrandMapping[] = [...DEFAULT_BRAND_MAPPINGS];
 let cacheLastUpdated = new Date();
 
@@ -226,7 +413,9 @@ export async function generateBrandkitSuggestions(
           confidence: mapping.confidence * 0.9, // Slightly lower for brand standardization
           reason: `Standardize brand name to canonical form`,
           context: `Brand standardization: ${brandEntity.text} → ${mapping.brandName}`,
-          brandMapping: mapping
+          brandMapping: mapping,
+          suggestionType: 'brand_standardization',
+          severity: 'medium'
         });
       }
       
@@ -245,7 +434,9 @@ export async function generateBrandkitSuggestions(
             reason: `Use preferred product name for ${mapping.brandName}`,
             context: `Product standardization within ${mapping.brandName} context`,
             brandMapping: mapping,
-            productMapping: product
+            productMapping: product,
+            suggestionType: 'product_standardization',
+            severity: 'medium'
           });
         }
       }
@@ -275,11 +466,21 @@ export async function generateBrandkitSuggestions(
           reason: `Use canonical product name for ${brand.brandName}`,
           context: `Product name standardization`,
           brandMapping: brand,
-          productMapping: product
+          productMapping: product,
+          suggestionType: 'product_standardization',
+          severity: 'medium'
         });
       }
     }
   }
+  
+  // Check for banned phrases
+  const bannedPhraseSuggestions = detectBannedPhrases(text, requestId);
+  suggestions.push(...bannedPhraseSuggestions);
+  
+  // Check for tone and style issues
+  const toneStyleSuggestions = detectToneStyleIssues(text, requestId);
+  suggestions.push(...toneStyleSuggestions);
   
   // Check for brand consistency across the text
   const brandConsistencySuggestions = checkBrandConsistency(text, suggestions, requestId);
@@ -292,7 +493,9 @@ export async function generateBrandkitSuggestions(
     requestId,
     totalSuggestions: filteredSuggestions.length,
     brandEntities: brands.length,
-    productEntities: products.length
+    productEntities: products.length,
+    bannedPhrases: bannedPhraseSuggestions.length,
+    toneStyleIssues: toneStyleSuggestions.length
   });
   
   return filteredSuggestions;
@@ -419,6 +622,200 @@ export function getBrandkitCacheStatus() {
     brands: brandMappingsCache.map(m => m.brandName),
     totalProducts: brandMappingsCache.reduce((sum, m) => sum + m.products.length, 0)
   };
+}
+
+// Detect banned phrases in text
+export function detectBannedPhrases(text: string, requestId?: string): BrandkitSuggestion[] {
+  const suggestions: BrandkitSuggestion[] = [];
+  const lowerText = text.toLowerCase();
+  
+  for (const bannedPhrase of brandkitConfig.bannedPhrases) {
+    if (!bannedPhrase.isActive) continue;
+    
+    const phrase = bannedPhrase.phrase.toLowerCase();
+    if (lowerText.includes(phrase)) {
+      const confidence = getSeverityConfidence(bannedPhrase.severity);
+      
+      suggestions.push({
+        originalText: bannedPhrase.phrase,
+        suggestedReplacement: bannedPhrase.suggestedReplacement || "Consider alternative phrasing",
+        confidence,
+        reason: bannedPhrase.reason,
+        context: `Banned phrase detected: ${bannedPhrase.category}`,
+        suggestionType: 'banned_phrase',
+        severity: bannedPhrase.severity
+      });
+      
+      logger.debug("Banned phrase detected", {
+        requestId,
+        phrase: bannedPhrase.phrase,
+        category: bannedPhrase.category,
+        severity: bannedPhrase.severity
+      });
+    }
+  }
+  
+  return suggestions;
+}
+
+// Detect tone and style issues in text
+export function detectToneStyleIssues(text: string, requestId?: string): BrandkitSuggestion[] {
+  const suggestions: BrandkitSuggestion[] = [];
+  
+  for (const rule of brandkitConfig.toneStyleRules) {
+    if (!rule.isActive) continue;
+    
+    const pattern = typeof rule.pattern === 'string' ? new RegExp(rule.pattern, 'gi') : rule.pattern;
+    const matches = text.match(pattern);
+    
+    if (matches && matches.length > 0) {
+      for (const match of matches) {
+        const confidence = getSeverityConfidence(rule.severity);
+        
+        suggestions.push({
+          originalText: match,
+          suggestedReplacement: rule.suggestedFix,
+          confidence,
+          reason: rule.description,
+          context: `Tone/style rule: ${rule.name}`,
+          suggestionType: 'tone_style',
+          severity: rule.severity
+        });
+      }
+      
+      logger.debug("Tone/style issue detected", {
+        requestId,
+        ruleId: rule.ruleId,
+        ruleName: rule.name,
+        matches: matches.length,
+        severity: rule.severity
+      });
+    }
+  }
+  
+  return suggestions;
+}
+
+// Get confidence score based on severity
+function getSeverityConfidence(severity: 'low' | 'medium' | 'high' | 'critical'): number {
+  switch (severity) {
+    case 'low': return 0.6;
+    case 'medium': return 0.75;
+    case 'high': return 0.9;
+    case 'critical': return 0.95;
+    default: return 0.7;
+  }
+}
+
+// Get complete brandkit configuration
+export function getBrandkitConfig(): BrandkitConfig {
+  return { ...brandkitConfig };
+}
+
+// Update brandkit configuration
+export function updateBrandkitConfig(newConfig: Partial<BrandkitConfig>): void {
+  brandkitConfig = {
+    ...brandkitConfig,
+    ...newConfig,
+    lastUpdated: new Date(),
+    version: incrementVersion(brandkitConfig.version)
+  };
+  
+  // Update legacy cache for backward compatibility
+  brandMappingsCache = [...brandkitConfig.brandMappings];
+  cacheLastUpdated = new Date();
+  
+  logger.info("Brandkit configuration updated", {
+    version: brandkitConfig.version,
+    bannedPhrases: brandkitConfig.bannedPhrases.length,
+    toneStyleRules: brandkitConfig.toneStyleRules.length,
+    brandMappings: brandkitConfig.brandMappings.length
+  });
+}
+
+// Add new brand mapping
+export function addBrandMapping(mapping: BrandMapping): void {
+  const existingIndex = brandkitConfig.brandMappings.findIndex(m => m.brandName === mapping.brandName);
+  
+  if (existingIndex >= 0) {
+    brandkitConfig.brandMappings[existingIndex] = { ...mapping, lastUpdated: new Date() };
+  } else {
+    brandkitConfig.brandMappings.push({ ...mapping, lastUpdated: new Date() });
+  }
+  
+  updateBrandkitConfig({});
+  logger.info("Brand mapping added/updated", { brandName: mapping.brandName, products: mapping.products.length });
+}
+
+// Add new banned phrase
+export function addBannedPhrase(phrase: BannedPhrase): void {
+  const existingIndex = brandkitConfig.bannedPhrases.findIndex(p => p.phrase === phrase.phrase);
+  
+  if (existingIndex >= 0) {
+    brandkitConfig.bannedPhrases[existingIndex] = { ...phrase, lastUpdated: new Date() };
+  } else {
+    brandkitConfig.bannedPhrases.push({ ...phrase, lastUpdated: new Date() });
+  }
+  
+  updateBrandkitConfig({});
+  logger.info("Banned phrase added/updated", { phrase: phrase.phrase, category: phrase.category });
+}
+
+// Add new tone/style rule
+export function addToneStyleRule(rule: ToneStyleRule): void {
+  const existingIndex = brandkitConfig.toneStyleRules.findIndex(r => r.ruleId === rule.ruleId);
+  
+  if (existingIndex >= 0) {
+    brandkitConfig.toneStyleRules[existingIndex] = rule;
+  } else {
+    brandkitConfig.toneStyleRules.push(rule);
+  }
+  
+  updateBrandkitConfig({});
+  logger.info("Tone/style rule added/updated", { ruleId: rule.ruleId, name: rule.name });
+}
+
+// Remove banned phrase
+export function removeBannedPhrase(phrase: string): boolean {
+  const index = brandkitConfig.bannedPhrases.findIndex(p => p.phrase === phrase);
+  if (index >= 0) {
+    brandkitConfig.bannedPhrases.splice(index, 1);
+    updateBrandkitConfig({});
+    logger.info("Banned phrase removed", { phrase });
+    return true;
+  }
+  return false;
+}
+
+// Remove brand mapping
+export function removeBrandMapping(brandName: string): boolean {
+  const index = brandkitConfig.brandMappings.findIndex(m => m.brandName === brandName);
+  if (index >= 0) {
+    brandkitConfig.brandMappings.splice(index, 1);
+    updateBrandkitConfig({});
+    logger.info("Brand mapping removed", { brandName });
+    return true;
+  }
+  return false;
+}
+
+// Remove tone/style rule
+export function removeToneStyleRule(ruleId: string): boolean {
+  const index = brandkitConfig.toneStyleRules.findIndex(r => r.ruleId === ruleId);
+  if (index >= 0) {
+    brandkitConfig.toneStyleRules.splice(index, 1);
+    updateBrandkitConfig({});
+    logger.info("Tone/style rule removed", { ruleId });
+    return true;
+  }
+  return false;
+}
+
+// Increment version number
+function incrementVersion(version: string): string {
+  const parts = version.split('.').map(Number);
+  parts[2] = (parts[2] || 0) + 1;
+  return parts.join('.');
 }
 
 // Validate brand mapping data

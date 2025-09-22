@@ -4,6 +4,7 @@ import cors from "cors";
 import routes from "./routes/replace.js";
 import nerRoutes from "./routes/ner.js";
 import suggestRoutes from "./routes/suggest.js";
+import brandkitRoutes from "./routes/brandkit.js";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.js";
 import { requestLoggerMiddleware, helmetMiddleware, readLimiter, writeLimiter } from "./middlewares/requestSecurity.js";
 import requestIdMiddleware from "./middlewares/requestId.js";
@@ -47,6 +48,8 @@ app.use('/api', (req, res, next) => {
 app.use("/api", routes);
 app.use("/api/ner", nerRoutes); // NER routes with their own rate limiting
 app.use("/api/suggest", suggestRoutes); // Suggestion routes
+// Brandkit admin and sync routes
+app.use("/api/brandkit", brandkitRoutes);
 app.get("/health", (req, res) => res.json({ ok: true, message: "Server healthy" }));
 
 // Error handling middleware (must be last)
