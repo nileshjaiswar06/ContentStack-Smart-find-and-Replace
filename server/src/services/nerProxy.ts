@@ -74,20 +74,42 @@ async function callSpaCy(opts: { path: string; payload?: any; requestId?: string
   const headers: Record<string, string> = {};
   if (opts.requestId) headers['x-request-id'] = opts.requestId;
 
-  if (opts.path.endsWith('/health')) {
-    return nerAxios.get(opts.path, { headers });
+  try {
+    log.debug({ requestId: opts.requestId, path: opts.path, baseURL: SPACY_URL, hasPayload: !!opts.payload }, 'Calling spaCy service');
+    
+    if (opts.path.endsWith('/health')) {
+      const response = await nerAxios.get(opts.path, { headers });
+      log.debug({ requestId: opts.requestId, path: opts.path, status: response.status }, 'spaCy health check successful');
+      return response;
+    }
+    
+    const response = await nerAxios.post(opts.path, opts.payload, { headers });
+    log.debug({ requestId: opts.requestId, path: opts.path, status: response.status, dataSize: JSON.stringify(response.data).length }, 'spaCy POST successful');
+    return response;
+  } catch (error: any) {
+    log.error({ 
+      requestId: opts.requestId, 
+      path: opts.path, 
+      baseURL: SPACY_URL,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorCode: error?.code,
+      errorStatus: error?.response?.status,
+      errorData: error?.response?.data
+    }, 'spaCy service call failed');
+    throw error;
   }
-  return nerAxios.post(opts.path, opts.payload, { headers });
 }
 
 const breaker = new opossum((opts: { path: string; payload?: any; requestId?: string }) => callSpaCy(opts), breakerOptions);
 
-breaker.on('open', () => log.error('opossum: circuit opened'));
-breaker.on('halfOpen', () => log.warn('opossum: circuit half-open'));
-breaker.on('close', () => log.info('opossum: circuit closed'));
-breaker.on('fallback', () => log.warn('opossum: fallback invoked'));
-breaker.on('reject', () => log.warn('opossum: breaker rejected request'));
-breaker.on('timeout', () => log.warn('opossum: breaker timeout'));
+breaker.on('open', () => log.error('opossum: circuit opened - spaCy service calls will be rejected'));
+breaker.on('halfOpen', () => log.warn('opossum: circuit half-open - testing spaCy service'));
+breaker.on('close', () => log.info('opossum: circuit closed - spaCy service is healthy'));
+breaker.on('fallback', () => log.warn('opossum: fallback invoked - spaCy service unavailable'));
+breaker.on('reject', () => log.warn('opossum: breaker rejected request - circuit is open'));
+breaker.on('timeout', () => log.warn('opossum: breaker timeout - spaCy service too slow'));
+breaker.on('failure', (error) => log.error({ error: error instanceof Error ? error.message : String(error) }, 'opossum: request failed'));
+breaker.on('success', () => log.debug('opossum: request succeeded'));
 
 // Report circuit breaker state to the spaCy service so it can expose a Prometheus metric
 async function reportCircuitStateToSpaCy(event?: string) {
@@ -112,24 +134,37 @@ breaker.on('open', () => void reportCircuitStateToSpaCy('open'));
 breaker.on('halfOpen', () => void reportCircuitStateToSpaCy('halfOpen'));
 breaker.on('close', () => void reportCircuitStateToSpaCy('close'));
 
-export async function extractEntities(text: string, model = 'en_core_web_sm', min_confidence = 0.5, requestId?: string): Promise<NerResponse> {
+export async function extractEntities(text: string, model = 'en_core_web_trf', min_confidence = 0.5, requestId?: string): Promise<NerResponse> {
   const rid = requestId ?? randomUUID();
   const startTime = Date.now();
   try {
-    log.debug({ requestId: rid, textLength: text.length, model }, 'Starting NER extraction call');
+    log.info({ requestId: rid, textLength: text.length, model, spacyUrl: SPACY_URL }, 'Starting NER extraction call to spaCy service');
     const response = await breaker.fire({ path: '/ner', payload: { text, model, min_confidence, request_id: rid }, requestId: rid });
     const data = response.data as NerResponse;
     const latency = Date.now() - startTime;
-    log.debug({ requestId: rid, textLength: text.length, modelUsed: data.model_used, latency, entityCount: data.entity_count }, 'NER extraction successful');
+    log.info({ requestId: rid, textLength: text.length, modelUsed: data.model_used, latency, entityCount: data.entity_count }, 'NER extraction successful from spaCy');
     return data;
   } catch (error: any) {
     const latency = Date.now() - startTime;
-    log.error({ requestId: rid, textLength: text.length, model, latency, error: error instanceof Error ? error.message : String(error) }, 'NER extraction failed');
+    const errorDetails = {
+      requestId: rid,
+      textLength: text.length,
+      model,
+      latency,
+      spacyUrl: SPACY_URL,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorCode: error?.code,
+      errorStatus: error?.response?.status,
+      errorData: error?.response?.data,
+      circuitBreakerOpen: (breaker as any).opened || false,
+      stackTrace: error instanceof Error ? error.stack : undefined
+    };
+    log.error(errorDetails, 'NER extraction failed - detailed error info');
     throw error;
   }
 }
 
-export async function extractEntitiesBatch(texts: string[], model = 'en_core_web_sm', min_confidence = 0.5, requestId?: string) {
+export async function extractEntitiesBatch(texts: string[], model = 'en_core_web_trf', min_confidence = 0.5, requestId?: string) {
   const rid = requestId ?? randomUUID();
   const startTime = Date.now();
   try {

@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
-from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST, REGISTRY
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -37,18 +37,34 @@ def log_with_request_id(level: str, message: str, **kwargs):
     log_func = getattr(logger, level.lower(), logger.info)
     log_func(message, **kwargs)
 
-# Prometheus metrics setup
-request_count = Counter('spacy_requests_total', 'Total NER requests', ['method', 'endpoint', 'status'])
-request_duration = Histogram('spacy_request_duration_seconds', 'Request duration', ['method', 'endpoint'])
-entities_extracted = Counter('spacy_entities_extracted_total', 'Total entities extracted', ['model', 'label'])
-text_length_processed = Histogram('spacy_text_length_chars', 'Length of processed text', ['model'])
-active_requests = Gauge('spacy_active_requests', 'Currently active requests')
-model_load_time = Gauge('spacy_model_load_time_seconds', 'Time taken to load models', ['model'])
+# Prometheus metrics setup (use safe factory to avoid duplicate registration during reloads)
+def _safe_metric(factory, name, *args, **kwargs):
+    """Create a Prometheus metric, or return the existing one if already registered."""
+    try:
+        return factory(name, *args, **kwargs)
+    except ValueError:
+        # Collector with this name already registered; try to find and return it from the default REGISTRY
+        for collector in REGISTRY._collector_to_names.keys():
+            try:
+                # collector may be an object with _name attribute (Counter/Histogram/Gauge)
+                if getattr(collector, '_name', None) == name:
+                    return collector
+            except Exception:
+                continue
+        # As a fallback, re-raise the original error
+        raise
+
+request_count = _safe_metric(Counter, 'spacy_requests_total', 'Total NER requests', ['method', 'endpoint', 'status'])
+request_duration = _safe_metric(Histogram, 'spacy_request_duration_seconds', 'Request duration', ['method', 'endpoint'])
+entities_extracted = _safe_metric(Counter, 'spacy_entities_extracted_total', 'Total entities extracted', ['model', 'label'])
+text_length_processed = _safe_metric(Histogram, 'spacy_text_length_chars', 'Length of processed text', ['model'])
+active_requests = _safe_metric(Gauge, 'spacy_active_requests', 'Currently active requests')
+model_load_time = _safe_metric(Gauge, 'spacy_model_load_time_seconds', 'Time taken to load models', ['model'])
 
 # Circuit breaker metrics - updated by Node service via /metrics/report
-circuit_breaker_failures_count = Gauge('spacy_circuit_breaker_failures_count', 'Circuit breaker failures (current count)')
-circuit_breaker_open = Gauge('spacy_circuit_breaker_open', 'Circuit breaker open state (1=open, 0=closed)')
-circuit_breaker_pending = Gauge('spacy_circuit_breaker_pending', 'Circuit breaker pending request count')
+circuit_breaker_failures_count = _safe_metric(Gauge, 'spacy_circuit_breaker_failures_count', 'Circuit breaker failures (current count)')
+circuit_breaker_open = _safe_metric(Gauge, 'spacy_circuit_breaker_open', 'Circuit breaker open state (1=open, 0=closed)')
+circuit_breaker_pending = _safe_metric(Gauge, 'spacy_circuit_breaker_pending', 'Circuit breaker pending request count')
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import expressRateLimit, { ipKeyGenerator }  from "express-rate-limit";
 import { extractEntities, extractEntitiesBatch } from "../services/nerProxy.js";
-import { extractNamedEntitiesFromText } from "../services/nerService.js";
+import { extractNamedEntitiesFromText, extractEntitiesWithCanonicalMapping } from "../services/nerService.js";
 import { logger } from "../utils/logger.js";
 
 const router = Router();
@@ -69,10 +69,28 @@ router.post("/", async (req, res, next) => {
       usedFallback = true;
     } else {
       try {
-        result = await extractEntities(text);
-        logger.info(`NER processed text (${text.length} chars) in ${Date.now() - startTime}ms using ${result.model_used || 'unknown'}`);
+        const requestId = (req as any).requestId;
+        result = await extractEntitiesWithCanonicalMapping(text, requestId);
+        // Convert to expected format for backwards compatibility
+        const compatibleResult = {
+          entities: result.entities.map(e => ({
+            text: e.text,
+            label: e.originalLabel || e.type.toUpperCase(),
+            start: 0, // Position info lost in canonical mapping
+            end: e.text.length,
+            confidence: e.confidence || 0.8,
+            canonical_type: e.type,
+            source: e.source
+          })),
+          model_used: result.model_used,
+          processing_time_ms: result.processing_time_ms,
+          text_length: result.text_length,
+          entity_count: result.entity_count
+        };
+        result = compatibleResult;
+        logger.info(`Enhanced NER processed text (${text.length} chars) in ${result.processing_time_ms}ms using ${result.model_used}`);
       } catch (error) {
-        logger.warn(`spaCy service failed, using fallback: ${error}`);
+        logger.warn(`Enhanced NER failed, using basic fallback: ${error}`);
         result = { 
           entities: extractNamedEntitiesFromText(text).map(e => ({
             text: e.text,

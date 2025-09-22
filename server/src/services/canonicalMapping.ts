@@ -151,17 +151,14 @@ export function mapToCanonicalType(
   text: string, 
   context?: string
 ): { canonicalType: CanonicalEntityType; confidence: number; reason: string } {
-  // Direct mapping
-  const directMapping = SPA_CY_TO_CANONICAL_MAP[spacyLabel];
-  if (directMapping) {
-    return {
-      canonicalType: directMapping.canonicalType,
-      confidence: directMapping.confidence,
-      reason: `Direct mapping from spaCy label '${spacyLabel}'`
-    };
+  // First, check special-case mappings for labels known to be frequently misclassified
+  // (e.g., LOC/GPE often includes product/brand names like 'Gemini AI')
+  if (spacyLabel === 'LOC' || spacyLabel === 'GPE' || spacyLabel === 'LOCATION') {
+    const specialCasesForLoc = getSpecialCaseMappings(text, spacyLabel);
+    if (specialCasesForLoc) return specialCasesForLoc;
   }
 
-  // Context-aware pattern matching
+  // Context-aware pattern matching (helps when labels are missing)
   for (const [canonicalType, patterns] of Object.entries(CONTEXT_PATTERNS)) {
     for (const pattern of patterns) {
       if (pattern.test(text)) {
@@ -174,13 +171,17 @@ export function mapToCanonicalType(
     }
   }
 
-  // Special handling for common misclassifications
-  const specialCases = getSpecialCaseMappings(text, spacyLabel);
-  if (specialCases) {
-    return specialCases;
+  // Direct mapping from spaCy labels
+  const directMapping = SPA_CY_TO_CANONICAL_MAP[spacyLabel];
+  if (directMapping) {
+    return {
+      canonicalType: directMapping.canonicalType,
+      confidence: directMapping.confidence,
+      reason: `Direct mapping from spaCy label '${spacyLabel}'`
+    };
   }
 
-  // Default fallback
+  // Fallback
   return {
     canonicalType: "Other",
     confidence: 0.30,
@@ -207,6 +208,34 @@ function getSpecialCaseMappings(
       canonicalType: "Brand",
       confidence: 0.90,
       reason: `Recognized brand name: '${text}'`
+    };
+  }
+
+  // AI/Tech products that might be misclassified as LOC
+  const aiProducts = [
+    'gemini ai', 'chatgpt', 'claude ai', 'gpt-4', 'bard', 'copilot', 'azure ai',
+    'openai', 'anthropic claude', 'google ai', 'microsoft ai', 'aws ai'
+  ];
+  
+  if (aiProducts.some(product => lowerText.includes(product))) {
+    return {
+      canonicalType: "Product",
+      confidence: 0.92,
+      reason: `AI product misclassified as location: '${text}'`
+    };
+  }
+
+  // Cloud services that might be misclassified
+  const cloudServices = [
+    'azure', 'aws', 'gcp', 'google cloud', 'microsoft azure', 'amazon web services',
+    'firebase', 'vercel', 'netlify', 'heroku', 'digitalocean'
+  ];
+  
+  if (cloudServices.some(service => lowerText.includes(service))) {
+    return {
+      canonicalType: "Product",
+      confidence: 0.88,
+      reason: `Cloud service: '${text}'`
     };
   }
 
@@ -240,6 +269,18 @@ function getSpecialCaseMappings(
       confidence: 0.85,
       reason: `Geographic entity misclassified as organization: '${text}'`
     };
+  }
+
+  // Special handling for LOC label - many tech products get misclassified as LOC
+  if (spacyLabel === 'LOC') {
+    // Check if it's likely a product/brand rather than location
+    if (/\b(?:ai|ml|cloud|tech|digital|solutions|systems|platform|service|app|software)\b/i.test(text)) {
+      return {
+        canonicalType: "Product",
+        confidence: 0.85,
+        reason: `Tech product misclassified as location: '${text}'`
+      };
+    }
   }
 
   return null;

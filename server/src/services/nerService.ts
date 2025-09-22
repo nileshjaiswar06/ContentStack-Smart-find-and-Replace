@@ -168,3 +168,62 @@ export function mergeEntities(...entityArrays: NamedEntity[][]): NamedEntity[] {
   
   return Array.from(entityMap.values());
 }
+
+ // Enhanced NER function that combines spaCy with canonical mapping and fallback
+export async function extractEntitiesWithCanonicalMapping(
+  text: string, 
+  requestId?: string
+): Promise<{
+  entities: NamedEntity[];
+  model_used: string;
+  processing_time_ms: number;
+  text_length: number;
+  entity_count: number;
+  source: "spacy_enhanced" | "fallback";
+}> {
+  const startTime = Date.now();
+  
+  try {
+    // Try spaCy first with TRF model
+    const { extractEntities } = await import("./nerProxy.js");
+    const spacyResult = await extractEntities(text, 'en_core_web_trf', 0.5, requestId);
+    
+    // Apply canonical mapping to spaCy results
+    const enhancedEntities: NamedEntity[] = spacyResult.entities.map(entity => {
+      const mapping = mapToCanonicalType(entity.label, entity.text, text);
+      return {
+        type: mapping.canonicalType,
+        text: entity.text,
+        confidence: entity.confidence * mapping.confidence, // Combine confidences
+        source: "spacy" as const,
+        originalLabel: entity.label
+      };
+    });
+    
+    // Merge with compromise and pattern-based entities
+    const fallbackEntities = extractNamedEntitiesFromText(text);
+    const mergedEntities = mergeEntities([...enhancedEntities, ...fallbackEntities]);
+    
+    return {
+      entities: mergedEntities,
+      model_used: spacyResult.model_used + "_enhanced",
+      processing_time_ms: Date.now() - startTime,
+      text_length: text.length,
+      entity_count: mergedEntities.length,
+      source: "spacy_enhanced"
+    };
+    
+  } catch (error) {
+    // Fallback to compromise only
+    const fallbackEntities = extractNamedEntitiesFromText(text);
+    
+    return {
+      entities: fallbackEntities,
+      model_used: "compromise_fallback",
+      processing_time_ms: Date.now() - startTime,
+      text_length: text.length,
+      entity_count: fallbackEntities.length,
+      source: "fallback"
+    };
+  }
+}
