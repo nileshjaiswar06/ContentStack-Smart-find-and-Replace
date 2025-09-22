@@ -1,4 +1,10 @@
-import { extractNamedEntitiesFromText, type NamedEntity } from "./nerService.js";
+import { 
+  extractNamedEntitiesFromText, 
+  processSpaCyEntities, 
+  mergeEntities,
+  type NamedEntity 
+} from "./nerService.js";
+import { extractEntities } from "./nerProxy.js";
 import { askAIForSuggestions, generateContextualReplacements, isAiServiceAvailable } from "./aiService.js";
 import { generateBrandkitSuggestions, type BrandkitSuggestion } from "./brandkitService.js";
 import { 
@@ -29,6 +35,45 @@ export type ReplacementSuggestion = {
   domainContext?: DomainContext; // Domain-specific context
   suggestionId?: string; // Unique ID for feedback tracking
 };
+
+
+ // Enhanced entity extraction using both spaCy and compromise with canonical mapping
+async function extractEntitiesWithCanonicalMapping(
+  text: string, 
+  requestId?: string
+): Promise<NamedEntity[]> {
+  try {
+    // Try spaCy first for high accuracy
+    const spacyResponse = await extractEntities(text, 'en_core_web_sm', 0.5, requestId);
+    const spacyEntities = processSpaCyEntities(spacyResponse.entities, text);
+    
+    // Fallback to compromise for additional coverage
+    const compromiseEntities = extractNamedEntitiesFromText(text);
+    
+    // Merge and deduplicate entities
+    const mergedEntities = mergeEntities(spacyEntities, compromiseEntities);
+    
+    logger.info("Enhanced NER extraction completed", {
+      requestId,
+      textLength: text.length,
+      spacyCount: spacyEntities.length,
+      compromiseCount: compromiseEntities.length,
+      mergedCount: mergedEntities.length,
+      spacyProcessingTime: spacyResponse.processing_time_ms
+    });
+    
+    return mergedEntities;
+  } catch (error: any) {
+    logger.warn("spaCy NER failed, falling back to compromise only", {
+      requestId,
+      error: error.message,
+      textLength: text.length
+    });
+    
+    // Fallback to compromise only
+    return extractNamedEntitiesFromText(text);
+  }
+}
 
 
 // Record user feedback for a suggestion to improve future recommendations
@@ -144,8 +189,8 @@ async function generateSuggestionsCore(
     });
   }
 
-  // 2) Named Entity Recognition
-  const entities = extractNamedEntitiesFromText(text);
+  // 2) Enhanced Named Entity Recognition
+  const entities = await extractEntitiesWithCanonicalMapping(text, requestId);
   const suggestions: ReplacementSuggestion[] = [];
 
   // 3) Generate heuristic suggestions with domain-aware processing

@@ -14,7 +14,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # spaCy models are installed via requirements.txt
-ARG INSTALL_TRF=false
+ARG INSTALL_TRF=true
 ARG TRF_VERSION=3.7.1
 # Install transformer model wheel explicitly when requested. Using the wheel
 # URL is more reliable in non-interactive/container builds than
