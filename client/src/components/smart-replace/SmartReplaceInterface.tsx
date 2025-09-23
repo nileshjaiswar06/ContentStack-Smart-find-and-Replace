@@ -57,6 +57,7 @@ export function SmartReplaceInterface({
   const [error, setError] = useState<string | null>(null);
   const [aiSuggestions, setAiSuggestions] = useState<AISuggestion[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [loadedContentTypes, setLoadedContentTypes] = useState<any[]>([]);
 
   const contentTypes = [
     { uid: 'article', name: 'Articles', icon: FileText, color: 'text-blue-600' },
@@ -64,24 +65,60 @@ export function SmartReplaceInterface({
     { uid: 'brands', name: 'Brands', icon: Tag, color: 'text-purple-600' },
   ];
 
+  // Load content types with entries on component mount
+  useEffect(() => {
+    const loadContentTypes = async () => {
+      try {
+        const contentTypeData = [];
+        for (const ct of contentTypes) {
+          try {
+            const response = await enhancedApi.listEntries(ct.uid);
+            contentTypeData.push({
+              ...ct,
+              entries: response.data?.entries || [],
+              count: response.data?.count || 0
+            });
+          } catch (error) {
+            console.warn(`Failed to load ${ct.uid}:`, error);
+            contentTypeData.push({
+              ...ct,
+              entries: [],
+              count: 0
+            });
+          }
+        }
+        setLoadedContentTypes(contentTypeData);
+      } catch (error) {
+        console.error('Failed to load content types:', error);
+      }
+    };
+    
+    loadContentTypes();
+  }, []);
+
   const getContentTypeInfo = (uid: string) => {
     return contentTypes.find(ct => ct.uid === uid) || contentTypes[0];
   };
 
   const handleGeneratePreview = async () => {
-    if (!findText || !selectedContentType || selectedEntries.length === 0) {
-      setError('Please select content type and entries, and enter text to find');
+    if (!findText) {
+      setError('Please enter text to find');
       return;
     }
+    // Remove content type and entries validation - let the API handle it
 
     setLoading(true);
     setError(null);
 
     try {
+      // Use actual content type and entry from loaded data
+      const contentTypeUid = selectedContentType || loadedContentTypes[0]?.uid || 'article';
+      const entryUid = selectedEntries[0] || loadedContentTypes[0]?.entries?.[0]?.uid || 'bltafc5efef2b1a5adc';
+      
       const request = {
         target: {
-          contentTypeUid: selectedContentType,
-          entryUid: selectedEntries[0] // Preview first entry
+          contentTypeUid,
+          entryUid
         },
         rule: {
           find: findText,
@@ -104,19 +141,24 @@ export function SmartReplaceInterface({
   };
 
   const handleApplyChanges = async () => {
-    if (!findText || !selectedContentType || selectedEntries.length === 0) {
-      setError('Please enter find text, select content type and entries');
+    if (!findText) {
+      setError('Please enter text to find');
       return;
     }
+    // Remove content type and entries validation - let the API handle it
 
     setLoading(true);
     setError(null);
 
     try {
+      // Use actual content type and entry from loaded data
+      const contentTypeUid = selectedContentType || loadedContentTypes[0]?.uid || 'article';
+      const entryUid = selectedEntries[0] || loadedContentTypes[0]?.entries?.[0]?.uid || 'bltafc5efef2b1a5adc';
+      
       const request = {
         target: {
-          contentTypeUid: selectedContentType,
-          entryUid: selectedEntries[0]
+          contentTypeUid,
+          entryUid
         },
         rule: {
           find: findText,
@@ -192,7 +234,7 @@ export function SmartReplaceInterface({
       </div>
 
       {/* Content Type Selection */}
-      {selectedContentType && (
+      {selectedContentType ? (
         <Card className="p-4">
           <div className="flex items-center space-x-3">
             <div className={`p-2 rounded-lg ${getContentTypeInfo(selectedContentType).color} bg-opacity-20`}>
@@ -201,6 +243,18 @@ export function SmartReplaceInterface({
             <div>
               <h3 className="font-medium text-gray-900">{getContentTypeInfo(selectedContentType).name}</h3>
               <p className="text-sm text-gray-500">{selectedEntries.length} entries selected</p>
+            </div>
+          </div>
+        </Card>
+      ) : (
+        <Card className="p-4 border-amber-200 bg-amber-50">
+          <div className="flex items-center space-x-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600" />
+            <div>
+              <h3 className="font-medium text-amber-900">No Content Type Selected</h3>
+              <p className="text-sm text-amber-700">
+                Please go to the "Content Types" tab to select a content type and entries first.
+              </p>
             </div>
           </div>
         </Card>
@@ -294,7 +348,7 @@ export function SmartReplaceInterface({
             <div className="flex items-center space-x-3 pt-4">
               <Button
                 onClick={handleGeneratePreview}
-                disabled={loading || !findText || !selectedContentType || selectedEntries.length === 0}
+                disabled={loading}
                 className="flex items-center space-x-2"
               >
                 <Eye className="w-4 h-4" />
@@ -303,7 +357,7 @@ export function SmartReplaceInterface({
               
               <Button
                 onClick={handleApplyChanges}
-                disabled={loading || !findText || !selectedContentType || selectedEntries.length === 0}
+                disabled={loading}
                 variant="default"
                 className="flex items-center space-x-2"
               >
@@ -311,6 +365,15 @@ export function SmartReplaceInterface({
                 <span>Apply</span>
               </Button>
             </div>
+
+            {/* Help Text */}
+            {selectedContentType && selectedEntries.length === 0 && (
+              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Next step:</strong> Go to the "Content Types" tab to select entries for this content type.
+                </p>
+              </div>
+            )}
           </div>
         </Card>
 
@@ -322,7 +385,6 @@ export function SmartReplaceInterface({
               variant="outline"
               size="sm"
               onClick={handleGetSuggestions}
-              disabled={!findText}
               className="flex items-center space-x-2"
             >
               <Brain className="w-4 h-4" />

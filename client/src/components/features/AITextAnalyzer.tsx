@@ -163,9 +163,9 @@ export function AITextAnalyzer({
               <p>💡 Tip: You can enter any text content directly - articles, product descriptions, emails, etc.</p>
             </div>
             
-            <Button
+            <Button 
               onClick={handleAnalyze}
-              disabled={loading || !inputText.trim()}
+              disabled={loading}
               className="flex items-center space-x-2"
             >
               {loading ? (

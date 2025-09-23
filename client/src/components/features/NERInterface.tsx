@@ -352,7 +352,7 @@ export function NERInterface({ initialText = '', onEntitySelect }: NERInterfaceP
             </div>
             <Button 
               onClick={analyzeText}
-              disabled={loading || !inputText.trim()}
+              disabled={loading}
               className="flex items-center space-x-2"
             >
               {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}

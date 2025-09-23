@@ -625,7 +625,7 @@ export class EnhancedApiClient {
     environment = 'development',
     branch = 'main'
   ): Promise<unknown> {
-    return this.request(`/api/replace/suggest?environment=${environment}&branch=${branch}`, {
+    return this.request(`/api/suggest?environment=${environment}&branch=${branch}`, {
       method: 'POST',
       body: JSON.stringify({ text, contentTypeUid }),
     });
@@ -638,7 +638,7 @@ export class EnhancedApiClient {
     environment = 'development',
     branch = 'main'
   ): Promise<unknown> {
-    return this.request(`/api/replace/suggest/batch?environment=${environment}&branch=${branch}`, {
+    return this.request(`/api/suggest/batch?environment=${environment}&branch=${branch}`, {
       method: 'POST',
       body: JSON.stringify({ texts, contentTypeUid }),
     });

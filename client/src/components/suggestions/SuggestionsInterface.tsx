@@ -433,7 +433,7 @@ export function SuggestionsInterface({ onSuggestionApplied }: SuggestionsInterfa
             </div>
             <Button 
               onClick={getSingleSuggestions}
-              disabled={loading || !inputText.trim()}
+              disabled={loading}
               className="flex items-center space-x-2"
             >
               {loading ? <Loader className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
