@@ -41,11 +41,11 @@ export const config = {
 export const validateConfig = () => {
   const errors: string[] = [];
   
-  if (config.contentstack.apiKey === 'your_contentstack_api_key') {
+  if (!config.contentstack.apiKey || config.contentstack.apiKey === 'your_contentstack_api_key') {
     errors.push('Contentstack API Key not configured');
   }
   
-  if (config.contentstack.deliveryToken === 'your_contentstack_delivery_token') {
+  if (!config.contentstack.deliveryToken || config.contentstack.deliveryToken === 'your_contentstack_delivery_token') {
     errors.push('Contentstack Delivery Token not configured');
   }
   

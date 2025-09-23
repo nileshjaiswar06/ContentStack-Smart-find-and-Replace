@@ -7,10 +7,9 @@ import { ContentstackDashboard } from '@/components/dashboard/ContentstackDashbo
 import { ContentTypesView } from '@/components/content-types/ContentTypesView';
 import { SmartReplaceInterface } from '@/components/smart-replace/SmartReplaceInterface';
 import { BulkOperationsInterface } from '@/components/bulk-operations/BulkOperationsInterface';
-import { enhancedApi, ContentTypeEntry } from '@/lib/enhanced-api';
-import { useRealtimeSync } from '@/lib/realtime-sync';
-import { contentstackService } from '@/lib/contentstack';
-import { debugContentstackConnection } from '@/lib/debug-contentstack';
+import { ContentTypeEntry } from '@/lib/enhanced-api';
+// import { useRealtimeSync } from '@/lib/realtime-sync';
+import { contentstack } from '@/lib/contentstack';
 
 interface ContentType {
   uid: string;
@@ -44,8 +43,8 @@ export function ContentstackApp() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Real-time sync
-  const { subscribeToContentUpdates, getConnectionStatus } = useRealtimeSync();
+  // Real-time sync (disabled for now)
+  // const { subscribeToContentUpdates, getConnectionStatus } = useRealtimeSync();
 
   // Load content types and stats with rate limiting
   const loadData = useCallback(async () => {
@@ -53,90 +52,85 @@ export function ContentstackApp() {
     setError(null);
     
     try {
-      // Check connection
-      const isHealthy = await enhancedApi.healthCheck();
-      setConnectionStatus(isHealthy ? 'connected' : 'disconnected');
+      console.log('🔍 Loading data from Contentstack...');
+      setConnectionStatus('connecting');
       
-      if (!isHealthy) {
-        throw new Error('Server connection failed');
+      // Get content types from Contentstack using the working approach
+      const contentTypesResult = await contentstack.contentType().find();
+      console.log('� Content types result:', contentTypesResult);
+      
+      if (!contentTypesResult.content_types || contentTypesResult.content_types.length === 0) {
+        throw new Error('No content types found');
       }
 
-      // Load content types directly from Contentstack CMS
+      setConnectionStatus('connected');
       const contentTypeData: ContentType[] = [];
+      let totalEntries = 0;
+      const recentChanges = 0;
 
-      // Debug Contentstack connection first
-      console.log('🔍 Testing Contentstack connection...');
-      const debugResult = await debugContentstackConnection();
-      
-      if (!debugResult) {
-        throw new Error('Contentstack connection failed. Please check your API credentials.');
-      }
-
-      // Get content types from Contentstack SDK
-      try {
-        const contentTypes = await contentstackService.getContentTypes();
-        let totalEntries = 0;
-        let recentChanges = 0;
-
-        console.log('Found content types:', contentTypes);
-
-        for (let i = 0; i < contentTypes.length; i++) {
-          const contentTypeUid = contentTypes[i];
+      // Process each content type
+      for (const ctRaw of contentTypesResult.content_types) {
+        // Assert the type of ctRaw
+        const ct = ctRaw as { uid: string; title?: string };
+        console.log(`📋 Processing content type: ${ct.uid}`);
+        
+        try {
+          // Get entries for this content type using your server API
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/replace/${ct.uid}?environment=${process.env.NEXT_PUBLIC_CONTENTSTACK_ENVIRONMENT}&branch=${process.env.NEXT_PUBLIC_CONTENTSTACK_BRANCH}`);
+          const apiResult = await response.json();
           
-          // Add delay between requests to avoid rate limiting
-          if (i > 0) {
-            await new Promise(resolve => setTimeout(resolve, 2000));
-          }
-          
-          try {
-            // Get entries from Contentstack CMS
-            const entries = await contentstackService.getEntries(contentTypeUid);
-            const entryCount = entries.entries?.length || 0;
+          if (apiResult.ok && apiResult.data) {
+            const entryCount = apiResult.data.count || 0;
             totalEntries += entryCount;
             
-            // Get the latest entry for lastUpdated
-            const latestEntry = entries.entries?.[0];
-            const lastUpdated = latestEntry?.updated_at || latestEntry?.created_at || new Date().toISOString();
-            
             contentTypeData.push({
-              uid: contentTypeUid,
-              title: contentTypeUid.charAt(0).toUpperCase() + contentTypeUid.slice(1) + 's',
+              uid: ct.uid,
+              title: ct.title || ct.uid,
               count: entryCount,
-              lastUpdated: lastUpdated,
+              lastUpdated: new Date().toISOString(),
               status: 'published'
             });
-
-            // Count recent changes (last 24 hours)
-            const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-            const recent = entries.entries?.filter((entry: any) => 
-              new Date(entry.updated_at || entry.created_at || '') > oneDayAgo
-            ).length || 0;
-            recentChanges += recent;
-          } catch (err) {
-            console.warn(`Failed to load ${contentTypeUid}:`, err);
+            
+            console.log(`✅ ${ct.uid}: ${entryCount} entries`);
+          } else {
+            console.warn(`⚠️ API error for ${ct.uid}:`, apiResult.error);
             contentTypeData.push({
-              uid: contentTypeUid,
-              title: contentTypeUid.charAt(0).toUpperCase() + contentTypeUid.slice(1) + 's',
+              uid: ct.uid,
+              title: ct.title || ct.uid,
               count: 0,
               lastUpdated: new Date().toISOString(),
               status: 'draft'
             });
           }
+          
+          // Add delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (err) {
+          console.warn(`⚠️ Failed to load entries for ${ct.uid}:`, err);
+          contentTypeData.push({
+            uid: ct.uid,
+            title: ct.title || ct.uid,
+            count: 0,
+            lastUpdated: new Date().toISOString(),
+            status: 'draft'
+          });
         }
-
-        setContentTypes(contentTypeData);
-        setStats({
-          totalEntries,
-          totalContentTypes: contentTypeData.length,
-          recentChanges,
-          pendingSuggestions: 0, // Will be updated from real data
-          lastSync: new Date().toISOString()
-        });
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load data');
-        setConnectionStatus('disconnected');
       }
+
+      setContentTypes(contentTypeData);
+      setStats({
+        totalEntries,
+        totalContentTypes: contentTypeData.length,
+        recentChanges,
+        pendingSuggestions: 0,
+        lastSync: new Date().toISOString()
+      });
+
+      console.log('🎉 Data loading completed!');
+      console.log(`📊 Summary: ${contentTypeData.length} content types, ${totalEntries} total entries`);
+      
     } catch (err) {
+      console.error('❌ Error loading data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load data');
       setConnectionStatus('disconnected');
     } finally {
@@ -207,11 +201,11 @@ export function ContentstackApp() {
     }
   };
 
-  const handlePreviewGenerated = (preview: any) => {
+  const handlePreviewGenerated = (preview: unknown) => {
     console.log('Preview generated:', preview);
   };
 
-  const handleChangesApplied = (result: any) => {
+  const handleChangesApplied = (result: unknown) => {
     console.log('Changes applied:', result);
     // Refresh data after changes
     loadData();
