@@ -10,6 +10,7 @@ services:
       - ./server/.env:/usr/src/app/.env:ro
     environment:
       - NODE_ENV=development
+      - CONTENTSTACK_WEBHOOK_SECRET=${CONTENTSTACK_WEBHOOK_SECRET}
       # Forward Gemini config from host .env (or override here for quick tests)
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GEMINI_MODEL=gemini-2.0-flash-exp
