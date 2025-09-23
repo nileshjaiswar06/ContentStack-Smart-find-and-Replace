@@ -19,6 +19,9 @@ import {
   Lightbulb
 } from 'lucide-react';
 import { BrandkitStatus } from '@/lib/enhanced-api';
+import { WebhookStatusComponent } from '@/components/features/WebhookStatus';
+import { LaunchIntegration } from '@/components/features/LaunchIntegration';
+import { AutomateWorkflows } from '@/components/features/AutomateWorkflows';
 
 interface ContentType {
   uid: string;
@@ -308,6 +311,15 @@ export function ContentstackDashboard({
           </div>
         </div>
       </Card>
+
+      {/* Webhook Status */}
+      <WebhookStatusComponent />
+
+      {/* Launch Integration */}
+      <LaunchIntegration />
+
+      {/* Automate Workflows */}
+      <AutomateWorkflows />
     </div>
   );
 }

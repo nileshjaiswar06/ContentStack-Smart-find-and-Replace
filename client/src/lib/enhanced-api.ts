@@ -287,6 +287,150 @@ export interface ToneAnalysisResponse {
   };
 }
 
+// Webhook interfaces
+export interface WebhookConfig {
+  enabled: boolean;
+  path: string;
+}
+
+export interface WebhookStatus {
+  webhooks: {
+    entry: WebhookConfig;
+    asset: WebhookConfig;
+    publish: WebhookConfig;
+    automate: WebhookConfig;
+  };
+  security: {
+    signature_verification: boolean;
+    webhook_secret_configured: boolean;
+  };
+  brandkit: {
+    real_time_sync: boolean;
+    content_types: string[];
+    last_sync: string;
+  };
+}
+
+export interface WebhookStatusResponse {
+  success: boolean;
+  data: WebhookStatus;
+}
+
+export interface WebhookEvent {
+  event: string;
+  data: {
+    content_type: { uid: string };
+    entry: { uid: string; title: string };
+    environment: { name: string };
+  };
+}
+
+export interface WebhookResponse {
+  success: boolean;
+  message: string;
+  event?: string;
+  contentTypeUid?: string;
+  entryUid?: string;
+  syncResult?: {
+    success: boolean;
+    brandsUpdated: number;
+    bannedPhrasesUpdated: number;
+    toneRulesUpdated: number;
+    errors: string[];
+    lastSync: string;
+  };
+}
+
+// Launch interfaces
+export interface LaunchConfig {
+  app: {
+    name: string;
+    version: string;
+    description: string;
+    capabilities: string[];
+  };
+  integration: {
+    launch: {
+      supported: boolean;
+      ui_embedded: boolean;
+      entry_context: boolean;
+    };
+    automate: {
+      supported: boolean;
+      webhook_triggers: boolean;
+      real_time_sync: boolean;
+    };
+    brandkit: {
+      cda_integration: boolean;
+      real_time_updates: boolean;
+      content_types: string[];
+    };
+  };
+  endpoints: {
+    brandkit_sync: string;
+    brandkit_config: string;
+    webhook_entry: string;
+    webhook_asset: string;
+    webhook_publish: string;
+  };
+}
+
+export interface LaunchConfigResponse {
+  success: boolean;
+  data: LaunchConfig;
+}
+
+export interface LaunchActionRequest {
+  action: string;
+  data?: Record<string, unknown>;
+}
+
+export interface LaunchActionResponse {
+  success: boolean;
+  action?: string;
+  data?: Record<string, unknown>;
+  error?: string;
+}
+
+// Automate interfaces
+export interface AutomateWorkflow {
+  id: string;
+  name: string;
+  description: string;
+  triggers: string[];
+  actions: AutomateAction[];
+  enabled: boolean;
+  lastRun?: string;
+  nextRun?: string;
+}
+
+export interface AutomateAction {
+  type: 'brandkit_sync' | 'content_analysis' | 'bulk_replace' | 'entry_update' | 'notification';
+  config: Record<string, unknown>;
+  condition?: string;
+}
+
+export interface AutomateWorkflowsResponse {
+  success: boolean;
+  data: AutomateWorkflow[];
+}
+
+export interface AutomateWorkflowResponse {
+  success: boolean;
+  data: AutomateWorkflow;
+}
+
+export interface AutomateExecutionRequest {
+  workflowId: string;
+  triggerData?: Record<string, unknown>;
+}
+
+export interface AutomateExecutionResponse {
+  success: boolean;
+  results: Record<string, unknown>[];
+  errors: string[];
+}
+
 export class EnhancedApiClient {
   private baseUrl: string;
 
@@ -547,6 +691,137 @@ export class EnhancedApiClient {
     return this.request(`/api/brandkit/analyze-tone?environment=${environment}&branch=${branch}`, {
       method: 'POST',
       body: JSON.stringify({ text, context }),
+    });
+  }
+
+  // Webhook API methods
+  async getWebhookStatus(
+    environment = 'development',
+    branch = 'main'
+  ): Promise<WebhookStatusResponse> {
+    return this.request(`/api/webhooks/status?environment=${environment}&branch=${branch}`);
+  }
+
+  async triggerEntryWebhook(
+    event: WebhookEvent,
+    environment = 'development',
+    branch = 'main'
+  ): Promise<WebhookResponse> {
+    return this.request(`/api/webhooks/entry?environment=${environment}&branch=${branch}`, {
+      method: 'POST',
+      body: JSON.stringify(event),
+    });
+  }
+
+  async triggerAssetWebhook(
+    event: WebhookEvent,
+    environment = 'development',
+    branch = 'main'
+  ): Promise<WebhookResponse> {
+    return this.request(`/api/webhooks/asset?environment=${environment}&branch=${branch}`, {
+      method: 'POST',
+      body: JSON.stringify(event),
+    });
+  }
+
+  async triggerPublishWebhook(
+    event: WebhookEvent,
+    environment = 'development',
+    branch = 'main'
+  ): Promise<WebhookResponse> {
+    return this.request(`/api/webhooks/publish?environment=${environment}&branch=${branch}`, {
+      method: 'POST',
+      body: JSON.stringify(event),
+    });
+  }
+
+  async triggerAutomateWebhook(
+    event: WebhookEvent,
+    environment = 'development',
+    branch = 'main'
+  ): Promise<WebhookResponse> {
+    return this.request(`/api/webhooks/automate?environment=${environment}&branch=${branch}`, {
+      method: 'POST',
+      body: JSON.stringify(event),
+    });
+  }
+
+  // Launch API methods
+  async getLaunchConfig(
+    environment = 'development',
+    branch = 'main'
+  ): Promise<LaunchConfigResponse> {
+    return this.request(`/api/launch/config?environment=${environment}&branch=${branch}`);
+  }
+
+  async executeLaunchAction(
+    action: LaunchActionRequest,
+    environment = 'development',
+    branch = 'main'
+  ): Promise<LaunchActionResponse> {
+    return this.request(`/api/launch/action?environment=${environment}&branch=${branch}`, {
+      method: 'POST',
+      body: JSON.stringify(action),
+    });
+  }
+
+  // Automate API methods
+  async getAutomateWorkflows(
+    environment = 'development',
+    branch = 'main'
+  ): Promise<AutomateWorkflowsResponse> {
+    return this.request(`/api/automate/workflows?environment=${environment}&branch=${branch}`);
+  }
+
+  async getAutomateWorkflow(
+    workflowId: string,
+    environment = 'development',
+    branch = 'main'
+  ): Promise<AutomateWorkflowResponse> {
+    return this.request(`/api/automate/workflows/${workflowId}?environment=${environment}&branch=${branch}`);
+  }
+
+  async executeAutomateWorkflow(
+    request: AutomateExecutionRequest,
+    environment = 'development',
+    branch = 'main'
+  ): Promise<AutomateExecutionResponse> {
+    return this.request(`/api/automate/execute?environment=${environment}&branch=${branch}`, {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
+  async createAutomateWorkflow(
+    workflow: Omit<AutomateWorkflow, 'id'>,
+    environment = 'development',
+    branch = 'main'
+  ): Promise<AutomateWorkflowResponse> {
+    return this.request(`/api/automate/workflows?environment=${environment}&branch=${branch}`, {
+      method: 'POST',
+      body: JSON.stringify(workflow),
+    });
+  }
+
+  async updateAutomateWorkflow(
+    workflowId: string,
+    updates: Partial<AutomateWorkflow>,
+    environment = 'development',
+    branch = 'main'
+  ): Promise<AutomateWorkflowResponse> {
+    return this.request(`/api/automate/workflows/${workflowId}?environment=${environment}&branch=${branch}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async deleteAutomateWorkflow(
+    workflowId: string,
+    environment = 'development',
+    branch = 'main'
+  ): Promise<{ success: boolean }> {
+    return this.request(`/api/automate/workflows/${workflowId}?environment=${environment}&branch=${branch}`, {
+      method: 'DELETE',
     });
   }
 }
