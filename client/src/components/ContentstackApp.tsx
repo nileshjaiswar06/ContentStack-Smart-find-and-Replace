@@ -10,7 +10,7 @@ import { BulkOperationsInterface } from '@/components/bulk-operations/BulkOperat
 import { SuggestionsInterface } from '@/components/suggestions/SuggestionsInterface';
 import { AITextAnalyzer } from '@/components/features/AITextAnalyzer';
 import { NERInterface } from '@/components/features/NERInterface';
-import { ContentTypeEntry } from '@/lib/enhanced-api';
+import { ContentTypeEntry, BrandkitStatus, enhancedApi } from '@/lib/enhanced-api';
 // import { useRealtimeSync } from '@/lib/realtime-sync';
 import { contentstack } from '@/lib/contentstack';
 
@@ -45,9 +45,23 @@ export function ContentstackApp() {
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting'>('connecting');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [brandkitStatus, setBrandkitStatus] = useState<BrandkitStatus | null>(null);
 
   // Real-time sync (disabled for now)
   // const { subscribeToContentUpdates, getConnectionStatus } = useRealtimeSync();
+
+  // Load brandkit status
+  const loadBrandkitStatus = useCallback(async () => {
+    try {
+      const response = await enhancedApi.getBrandkitStatus();
+      if (response.success && response.data) {
+        setBrandkitStatus(response.data);
+        console.log('✅ Brandkit status loaded:', response.data);
+      }
+    } catch (err) {
+      console.warn('⚠️ Failed to load brandkit status:', err);
+    }
+  }, []);
 
   // Load content types and stats with rate limiting
   const loadData = useCallback(async () => {
@@ -132,6 +146,9 @@ export function ContentstackApp() {
       console.log('🎉 Data loading completed!');
       console.log(`📊 Summary: ${contentTypeData.length} content types, ${totalEntries} total entries`);
       
+      // Load brandkit status
+      await loadBrandkitStatus();
+      
     } catch (err) {
       console.error('❌ Error loading data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load data');
@@ -187,6 +204,24 @@ export function ContentstackApp() {
     });
   };
 
+  const handleBrandkitSync = async () => {
+    try {
+      console.log('🔄 Starting brandkit sync...');
+      const response = await enhancedApi.syncBrandkit();
+      if (response.success) {
+        console.log('✅ Brandkit sync completed:', response.data);
+        // Reload brandkit status after sync
+        await loadBrandkitStatus();
+        // Also reload all data
+        await loadData();
+      } else {
+        console.error('❌ Brandkit sync failed:', response);
+      }
+    } catch (err) {
+      console.error('❌ Brandkit sync error:', err);
+    }
+  };
+
   const handleQuickAction = (action: string) => {
     switch (action) {
       case 'find':
@@ -205,7 +240,7 @@ export function ContentstackApp() {
         setActiveTab('ner');
         break;
       case 'sync':
-        loadData();
+        handleBrandkitSync();
         break;
     }
   };
@@ -227,6 +262,7 @@ export function ContentstackApp() {
           <ContentstackDashboard
             contentTypes={contentTypes}
             stats={stats}
+            brandkitStatus={brandkitStatus}
             onRefresh={loadData}
             onContentTypeClick={handleContentTypeSelect}
             onQuickAction={handleQuickAction}

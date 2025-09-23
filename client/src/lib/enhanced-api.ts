@@ -213,6 +213,80 @@ export interface RollbackResponse {
   requestId: string;
 }
 
+// Brandkit interfaces
+export interface BrandkitProvider {
+  name: string;
+  enabled: boolean;
+  configured: boolean;
+  baseUrl: string;
+}
+
+export interface BrandkitProvidersResponse {
+  success: boolean;
+  data: BrandkitProvider[];
+}
+
+export interface BrandkitStatus {
+  mappingCount: number;
+  lastUpdated: string;
+  brands: string[];
+  totalProducts: number;
+}
+
+export interface BrandkitStatusResponse {
+  success: boolean;
+  data: BrandkitStatus;
+}
+
+export interface BrandkitSyncResponse {
+  success: boolean;
+  data: {
+    success: boolean;
+    brandsUpdated: number;
+    bannedPhrasesUpdated: number;
+    toneRulesUpdated: number;
+    errors: string[];
+    lastSync: string;
+  };
+}
+
+export interface BrandkitSuggestion {
+  text: string;
+  suggestedReplacement: string;
+  confidence: number;
+  reason: string;
+  context?: string;
+}
+
+export interface BrandkitSuggestionsResponse {
+  success: boolean;
+  data: {
+    suggestions: BrandkitSuggestion[];
+    count: number;
+    textLength: number;
+    context: {
+      contentTypeUid: string;
+    };
+  };
+}
+
+export interface ToneAnalysisIssue {
+  text: string;
+  issue: string;
+  suggestion: string;
+  severity: 'low' | 'medium' | 'high';
+}
+
+export interface ToneAnalysisResponse {
+  success: boolean;
+  data: {
+    overallTone: string;
+    confidence: number;
+    suggestions: string[];
+    issues: ToneAnalysisIssue[];
+  };
+}
+
 export class EnhancedApiClient {
   private baseUrl: string;
 
@@ -426,6 +500,54 @@ export class EnhancedApiClient {
     }
     
     throw new Error('Job polling timeout');
+  }
+
+  // Brandkit API methods
+  async getBrandkitProviders(
+    environment = 'development',
+    branch = 'main'
+  ): Promise<BrandkitProvidersResponse> {
+    return this.request(`/api/brandkit/providers?environment=${environment}&branch=${branch}`);
+  }
+
+  async getBrandkitStatus(
+    environment = 'development',
+    branch = 'main'
+  ): Promise<BrandkitStatusResponse> {
+    return this.request(`/api/brandkit/status?environment=${environment}&branch=${branch}`);
+  }
+
+  async syncBrandkit(
+    environment = 'development',
+    branch = 'main'
+  ): Promise<BrandkitSyncResponse> {
+    return this.request(`/api/brandkit/sync?environment=${environment}&branch=${branch}`, {
+      method: 'POST',
+    });
+  }
+
+  async getBrandkitSuggestions(
+    text: string,
+    context: { contentTypeUid?: string },
+    environment = 'development',
+    branch = 'main'
+  ): Promise<BrandkitSuggestionsResponse> {
+    return this.request(`/api/brandkit/suggestions?environment=${environment}&branch=${branch}`, {
+      method: 'POST',
+      body: JSON.stringify({ text, context }),
+    });
+  }
+
+  async analyzeTone(
+    text: string,
+    context: { targetTone?: string },
+    environment = 'development',
+    branch = 'main'
+  ): Promise<ToneAnalysisResponse> {
+    return this.request(`/api/brandkit/analyze-tone?environment=${environment}&branch=${branch}`, {
+      method: 'POST',
+      body: JSON.stringify({ text, context }),
+    });
   }
 }
 

@@ -18,8 +18,11 @@ import {
   TrendingUp,
   Info,
   AlertTriangle,
-  Copy
+  Copy,
+  Target,
+  MessageSquare
 } from 'lucide-react';
+import { enhancedApi, BrandkitSuggestion, ToneAnalysisResponse } from '@/lib/enhanced-api';
 
 interface Suggestion {
   entity: {
@@ -81,6 +84,9 @@ export function SuggestionsInterface({ onSuggestionApplied }: SuggestionsInterfa
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aiStatus, setAiStatus] = useState<any>(null);
+  const [brandkitSuggestions, setBrandkitSuggestions] = useState<BrandkitSuggestion[]>([]);
+  const [toneAnalysis, setToneAnalysis] = useState<ToneAnalysisResponse | null>(null);
+  const [showToneAnalysis, setShowToneAnalysis] = useState(false);
 
   // Load AI status on component mount
   useEffect(() => {
@@ -105,8 +111,11 @@ export function SuggestionsInterface({ onSuggestionApplied }: SuggestionsInterfa
     setLoading(true);
     setError(null);
     setSuggestions([]);
+    setBrandkitSuggestions([]);
+    setToneAnalysis(null);
     
     try {
+      // Get AI suggestions
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/suggest?environment=${process.env.NEXT_PUBLIC_CONTENTSTACK_ENVIRONMENT}&branch=${process.env.NEXT_PUBLIC_CONTENTSTACK_BRANCH}`, {
         method: 'POST',
         headers: {
@@ -125,6 +134,29 @@ export function SuggestionsInterface({ onSuggestionApplied }: SuggestionsInterfa
       } else {
         setError(result.error || 'Failed to get suggestions');
       }
+
+      // Get brandkit suggestions
+      try {
+        const brandkitResponse = await enhancedApi.getBrandkitSuggestions(inputText, { contentTypeUid: 'general' });
+        if (brandkitResponse.success && brandkitResponse.data.suggestions) {
+          setBrandkitSuggestions(brandkitResponse.data.suggestions);
+          console.log('✅ Brandkit suggestions loaded:', brandkitResponse.data.suggestions.length);
+        }
+      } catch (err) {
+        console.warn('⚠️ Failed to load brandkit suggestions:', err);
+      }
+
+      // Get tone analysis
+      try {
+        const toneResponse = await enhancedApi.analyzeTone(inputText, { targetTone: 'professional' });
+        if (toneResponse.success && toneResponse.data) {
+          setToneAnalysis(toneResponse);
+          console.log('✅ Tone analysis completed:', toneResponse.data.overallTone);
+        }
+      } catch (err) {
+        console.warn('⚠️ Failed to analyze tone:', err);
+      }
+
     } catch (err) {
       setError('Network error while getting suggestions');
       console.error('Error getting suggestions:', err);
@@ -213,6 +245,34 @@ export function SuggestionsInterface({ onSuggestionApplied }: SuggestionsInterfa
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
+  };
+
+  const handleApplyBrandkitSuggestion = (suggestion: BrandkitSuggestion) => {
+    console.log('Applying brandkit suggestion:', suggestion);
+    // You can implement specific brandkit suggestion application logic here
+  };
+
+  const handleToneAnalysisToggle = () => {
+    setShowToneAnalysis(!showToneAnalysis);
+  };
+
+  const getToneColor = (tone: string) => {
+    switch (tone.toLowerCase()) {
+      case 'professional': return 'text-green-600 bg-green-50';
+      case 'casual': return 'text-blue-600 bg-blue-50';
+      case 'friendly': return 'text-yellow-600 bg-yellow-50';
+      case 'formal': return 'text-purple-600 bg-purple-50';
+      default: return 'text-gray-600 bg-gray-50';
+    }
+  };
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity.toLowerCase()) {
+      case 'high': return 'text-red-600 bg-red-50';
+      case 'medium': return 'text-yellow-600 bg-yellow-50';
+      case 'low': return 'text-green-600 bg-green-50';
+      default: return 'text-gray-600 bg-gray-50';
+    }
   };
 
   const renderSuggestionCard = (suggestion: Suggestion, index: number) => {
@@ -458,6 +518,164 @@ export function SuggestionsInterface({ onSuggestionApplied }: SuggestionsInterfa
             {suggestions.map((suggestion, index) => renderSuggestionCard(suggestion, index))}
           </div>
         </div>
+      )}
+
+      {/* Brandkit Suggestions */}
+      {activeMode === 'single' && brandkitSuggestions.length > 0 && (
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+              <Star className="w-5 h-5 text-yellow-600" />
+              <span>Brandkit Suggestions</span>
+            </h2>
+            <Badge variant="outline" className="flex items-center space-x-1">
+              <Target className="w-3 h-3" />
+              <span>Brand-Specific</span>
+            </Badge>
+          </div>
+          
+          <div className="space-y-4">
+            {brandkitSuggestions.map((suggestion, index) => (
+              <Card key={index} className="p-4 border-l-4 border-l-yellow-500">
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center space-x-2">
+                      <div className="p-1 rounded text-yellow-600 bg-yellow-50">
+                        <Star className="w-4 h-4" />
+                      </div>
+                      <Badge className="text-xs text-yellow-600 bg-yellow-50">
+                        Brandkit
+                      </Badge>
+                      <Badge className={`text-xs ${getConfidenceColor(suggestion.confidence)}`}>
+                        {Math.round(suggestion.confidence * 100)}% confidence
+                      </Badge>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => handleApplyBrandkitSuggestion(suggestion)}
+                      className="flex items-center space-x-1"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      <span>Apply</span>
+                    </Button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="p-2 bg-red-50 border border-red-200 rounded">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-red-800">Original:</span>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => copyToClipboard(suggestion.text)}
+                        >
+                          <Copy className="w-3 h-3" />
+                        </Button>
+                      </div>
+                      <p className="text-red-900 font-mono text-sm">{suggestion.text}</p>
+                    </div>
+                    <div className="p-2 bg-green-50 border border-green-200 rounded">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-green-800">Suggested:</span>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => copyToClipboard(suggestion.suggestedReplacement)}
+                        >
+                          <Copy className="w-3 h-3" />
+                        </Button>
+                      </div>
+                      <p className="text-green-900 font-mono text-sm">{suggestion.suggestedReplacement}</p>
+                    </div>
+                  </div>
+
+                  <div className="text-sm text-gray-600">
+                    <p><strong>Reason:</strong> {suggestion.reason}</p>
+                    {suggestion.context && (
+                      <p><strong>Context:</strong> {suggestion.context}</p>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Tone Analysis */}
+      {activeMode === 'single' && toneAnalysis && (
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+              <MessageSquare className="w-5 h-5 text-blue-600" />
+              <span>Tone Analysis</span>
+            </h2>
+            <div className="flex items-center space-x-2">
+              <Badge className={`text-xs ${getToneColor(toneAnalysis.data.overallTone)}`}>
+                {toneAnalysis.data.overallTone}
+              </Badge>
+              <Badge variant="outline" className="text-xs">
+                {Math.round(toneAnalysis.data.confidence * 100)}% confidence
+              </Badge>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleToneAnalysisToggle}
+              >
+                {showToneAnalysis ? 'Hide Details' : 'Show Details'}
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <h3 className="font-medium text-blue-900 mb-2">Overall Tone: {toneAnalysis.data.overallTone}</h3>
+              <p className="text-blue-800 text-sm">Confidence: {Math.round(toneAnalysis.data.confidence * 100)}%</p>
+            </div>
+
+            {toneAnalysis.data.suggestions.length > 0 && (
+              <div>
+                <h4 className="font-medium text-gray-900 mb-2">General Suggestions:</h4>
+                <ul className="space-y-1">
+                  {toneAnalysis.data.suggestions.map((suggestion: string, index: number) => (
+                    <li key={index} className="text-sm text-gray-600 flex items-start space-x-2">
+                      <span className="text-blue-500 mt-1">•</span>
+                      <span>{suggestion}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {showToneAnalysis && toneAnalysis.data.issues.length > 0 && (
+              <div>
+                <h4 className="font-medium text-gray-900 mb-2">Specific Issues:</h4>
+                <div className="space-y-3">
+                  {toneAnalysis.data.issues.map((issue: any, index: number) => (
+                    <div key={index} className="p-3 border border-gray-200 rounded-lg">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          <Badge className={`text-xs ${getSeverityColor(issue.severity)}`}>
+                            {issue.severity}
+                          </Badge>
+                          <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
+                            "{issue.text}"
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-700 mb-2">
+                        <strong>Issue:</strong> {issue.issue}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        <strong>Suggestion:</strong> {issue.suggestion}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
       )}
 
       {/* Batch Mode Results */}
