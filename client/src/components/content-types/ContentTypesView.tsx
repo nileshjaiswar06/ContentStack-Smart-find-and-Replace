@@ -69,11 +69,9 @@ export function ContentTypesView({ contentTypes: propContentTypes, onEntrySelect
     setError(null);
     
     try {
-      console.log('🔍 Loading content types for ContentTypesView...');
       
       // Get content types from Contentstack using the working approach
       const contentTypesResult = await contentstack.contentType().find();
-      console.log('📊 Content types result:', contentTypesResult);
       
       if (!contentTypesResult.content_types || contentTypesResult.content_types.length === 0) {
         throw new Error('No content types found');
@@ -84,7 +82,6 @@ export function ContentTypesView({ contentTypes: propContentTypes, onEntrySelect
       // Process each content type
       for (const ctRaw of contentTypesResult.content_types) {
         const ct = ctRaw as { uid: string; title?: string };
-        console.log(`📋 Processing content type: ${ct.uid}`);
         
         try {
           // Get entry count using server API
@@ -102,7 +99,6 @@ export function ContentTypesView({ contentTypes: propContentTypes, onEntrySelect
             entries: [] // Will be loaded on demand
           });
           
-          console.log(`✅ ${ct.uid}: ${entryCount} entries`);
           
           // Add delay to avoid rate limiting
           await new Promise(resolve => setTimeout(resolve, 500));
@@ -162,11 +158,9 @@ export function ContentTypesView({ contentTypes: propContentTypes, onEntrySelect
 
   const loadEntriesForContentType = async (contentTypeUid: string) => {
     try {
-      console.log(`🔍 Loading entries for ${contentTypeUid}...`);
       
       // Get entries using the contentstack SDK directly
       const entriesResult = await contentstack.contentType(contentTypeUid).entry().find();
-      console.log(`📊 Entries result for ${contentTypeUid}:`, entriesResult);
       
       const entries = entriesResult.entries || [];
       
@@ -176,9 +170,7 @@ export function ContentTypesView({ contentTypes: propContentTypes, onEntrySelect
           ? { ...ct, entries: entries as ContentTypeEntry[] }
           : ct
       ));
-      
-      console.log(`✅ Loaded ${entries.length} entries for ${contentTypeUid}`);
-    } catch (err) {
+          } catch (err) {
       console.warn(`⚠️ Failed to load entries for ${contentTypeUid}:`, err);
     }
   };

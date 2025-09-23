@@ -47,7 +47,7 @@ export function AutomateWorkflows({
       const response = await enhancedApi.getAutomateWorkflows(environment, branch);
       if (response.success && response.data) {
         setWorkflows(response.data);
-        console.log('✅ Automate workflows loaded:', response.data);
+        // Automate workflows loaded
       } else {
         setError('Failed to load workflows');
       }
@@ -74,7 +74,7 @@ export function AutomateWorkflows({
       );
       
       if (response.success) {
-        console.log(`✅ Workflow ${workflowId} executed:`, response.results);
+        // Workflow executed
         // Refresh workflows to update last run time
         await loadWorkflows();
       } else {
@@ -97,7 +97,7 @@ export function AutomateWorkflows({
       );
       
       if (response.success) {
-        console.log(`✅ Workflow ${workflowId} ${enabled ? 'enabled' : 'disabled'}`);
+        // Workflow status updated
         await loadWorkflows();
       }
     } catch (err) {

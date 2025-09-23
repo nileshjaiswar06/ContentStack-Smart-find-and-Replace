@@ -51,7 +51,7 @@ export class RealtimeSyncService {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
       setTimeout(() => {
-        console.log(`Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+        // Attempting to reconnect
         this.connect();
       }, this.reconnectInterval);
     } else {

@@ -269,7 +269,7 @@ function extractRichTextContent(richTextField: any): string[] {
     return [richTextField.text];
   }
   
-  console.log('Unhandled Rich Text format:', richTextField);
+        // Unhandled Rich Text format
   return [];
 }
 

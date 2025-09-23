@@ -184,7 +184,7 @@ router.get("/app", async (req: Request, res: Response) => {
                 .then(response => response.json())
                 .then(data => {
                     alert('Brandkit data synced successfully!');
-                    console.log('Sync result:', data);
+                    // Sync result received
                 })
                 .catch(error => {
                     alert('Sync failed: ' + error.message);
@@ -197,7 +197,7 @@ router.get("/app", async (req: Request, res: Response) => {
             fetch('/api/brandkit/config')
                 .then(response => response.json())
                 .then(data => {
-                    console.log('Brandkit config updated:', data);
+                    // Brandkit config updated
                 })
                 .catch(error => {
                     console.error('Config fetch error:', error);

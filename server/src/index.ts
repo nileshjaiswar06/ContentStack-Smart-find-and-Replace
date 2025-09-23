@@ -61,12 +61,10 @@ realtimeSyncService.initialize();
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT} in ${process.env.NODE_ENV} mode`);
-  console.log(`Launch app available at: http://localhost:${PORT}/api/launch/app`);
-  console.log(`Webhooks available at: http://localhost:${PORT}/api/webhooks/`);
+  // Server started successfully
 });
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err: Error) => {
-  console.error('Unhandled Rejection:', err);
+  // Log unhandled rejection for debugging
 });

@@ -89,7 +89,7 @@ async function initializeRedis() {
   }, { connection, concurrency });
     
     redisInitialized = true;
-    console.log('Redis queue initialized successfully');
+    // Redis queue initialized successfully
   } catch (error: any) {
     console.warn('Redis initialization skipped or failed; using in-memory fallback:', String(error?.message ?? error));
     redisInitialized = false;
@@ -99,14 +99,14 @@ async function initializeRedis() {
 // Graceful shutdown: close BullMQ connections when process exits
 async function gracefulShutdown() {
   try {
-    console.log('Shutting down: closing job worker and queue if initialized');
+    // Shutting down: closing job worker and queue if initialized
     if (jobWorker && typeof jobWorker.close === 'function') {
       await jobWorker.close();
-      console.log('jobWorker closed');
+      // jobWorker closed
     }
     if (bullQueue && typeof bullQueue.close === 'function') {
       await bullQueue.close();
-      console.log('bullQueue closed');
+      // bullQueue closed
     }
   } catch (e) {
     console.warn('Error during graceful shutdown:', String((e as any)?.message ?? e));
@@ -188,7 +188,7 @@ export async function createBatchJob(payload: any) {
   if (useRedis && redisInitialized && bullQueue) {
     try {
       await bullQueue.add("apply", { jobId: id, payload });
-      console.log('Job queued in Redis:', id);
+      // Job queued in Redis
     } catch (error: any) {
   console.error('Failed to queue job in Redis, falling back to in-memory:', String(error?.message ?? error));
       setImmediate(() => { void processInMemoryJob(id); });
@@ -224,7 +224,7 @@ async function processInMemoryJob(jobId: string) {
       result,
       entryErrors: result.entryErrors || []
     });
-    console.log('In-memory job completed:', jobId);
+    // In-memory job completed
   } catch (err: any) {
   updateJobStatus(jobId, "failed", { error: String(err?.message ?? err) });
   console.error('In-memory job failed:', jobId, String(err ?? 'unknown error'));

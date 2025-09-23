@@ -499,7 +499,7 @@ export class EnhancedApiClient {
       if (response.status === 429 && retryCount < 3) {
         // Rate limited - wait and retry with exponential backoff
         const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
-        console.log(`Rate limited, retrying in ${delay}ms...`);
+        // Rate limited, retrying
         await new Promise(resolve => setTimeout(resolve, delay));
         return this.request<T>(endpoint, options, retryCount + 1);
       }

@@ -52,10 +52,10 @@ export function AITextAnalyzer({
     setSuggestions([]);
 
     try {
-      console.log('🔍 Analyzing text:', inputText.substring(0, 100) + '...');
+      // Analyzing text
       
       const response = await enhancedApi.getSuggestions(inputText, contentTypeUid);
-      console.log('📊 AI Response:', response);
+      // AI Response received
 
       // Type assertion to help TypeScript understand the structure
       const typedResponse = response as {
@@ -65,7 +65,7 @@ export function AITextAnalyzer({
 
       if (typedResponse.ok && typedResponse.data && typedResponse.data.suggestions) {
         setSuggestions(typedResponse.data.suggestions);
-        console.log(`✅ Found ${typedResponse.data.suggestions.length} suggestions`);
+        // Suggestions found
       } else {
         console.warn('⚠️ No suggestions found:', response);
         setSuggestions([]);

@@ -2,10 +2,9 @@ import { contentstack } from './contentstack';
 
 // Debug function to test Contentstack connection
 export async function debugContentstackConnection() {
-  console.log('🔍 Debugging Contentstack Connection...');
   
   // Log current configuration
-  console.log('📋 Current configuration:', {
+  // Current configuration
     apiKey: process.env.NEXT_PUBLIC_CONTENTSTACK_API_KEY || 'NOT_SET',
     deliveryToken: process.env.NEXT_PUBLIC_CONTENTSTACK_DELIVERY_TOKEN || 'NOT_SET',
     environment: process.env.NEXT_PUBLIC_CONTENTSTACK_ENVIRONMENT || 'NOT_SET',
@@ -14,26 +13,26 @@ export async function debugContentstackConnection() {
   
   try {
     // Test 1: Check if we can get content types
-    console.log('📋 Step 1: Fetching content types...');
+    // Step 1: Fetching content types
     const contentTypesResult = await contentstack.contentType().find();
-    console.log('✅ Content types result:', contentTypesResult);
-    console.log('📊 Found content types:', (contentTypesResult as any).content_types?.length || 0);
+    // Content types result received
+    // Found content types
     
     if ((contentTypesResult as any).content_types && (contentTypesResult as any).content_types.length > 0) {
-      console.log('📝 Content type UIDs:', (contentTypesResult as any).content_types.map((ct: any) => ct.uid));
+      // Content type UIDs
       
       // Test 2: Try to get entries for the first content type
       const firstContentType = (contentTypesResult as any).content_types[0].uid;
-      console.log(`📄 Step 2: Fetching entries for ${firstContentType}...`);
+      // Step 2: Fetching entries
       
       try {
         const entriesResult = await contentstack.contentType(firstContentType).entry().find();
-        console.log('✅ Entries result:', entriesResult);
-        console.log('📊 Found entries:', (entriesResult as any).entries?.length || 0);
+        // Entries result received
+        // Found entries
         
         if ((entriesResult as any).entries && (entriesResult as any).entries.length > 0) {
           const firstEntry = (entriesResult as any).entries[0];
-          console.log('📝 Sample entry:', {
+          // Sample entry
             uid: firstEntry.uid,
             title: firstEntry.title || firstEntry.name,
             contentType: firstEntry._content_type_uid
@@ -44,7 +43,7 @@ export async function debugContentstackConnection() {
       }
     }
     
-    console.log('🎉 Contentstack connection test completed!');
+    // Contentstack connection test completed
     return true;
   } catch (error: any) {
     console.error('❌ Contentstack connection failed:', error);
@@ -73,7 +72,7 @@ export async function debugContentstackConnection() {
 
 // Function to test with different configurations
 export async function testWithConfig(apiKey: string, deliveryToken: string, environment: string, region: string) {
-  console.log('🧪 Testing with custom config...');
+  // Testing with custom config
   
   const testConfig = {
     apiKey,
@@ -85,8 +84,8 @@ export async function testWithConfig(apiKey: string, deliveryToken: string, envi
   try {
     const testStack = require('@contentstack/delivery-sdk').stack(testConfig);
     const result = await testStack.contentType().find();
-    console.log('✅ Test successful with config:', testConfig);
-    console.log('📊 Found content types:', result.entries?.length || 0);
+    // Test successful with config
+    // Found content types
     return true;
   } catch (error) {
     console.error('❌ Test failed with config:', testConfig);

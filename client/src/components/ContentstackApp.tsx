@@ -56,7 +56,7 @@ export function ContentstackApp() {
       const response = await enhancedApi.getBrandkitStatus();
       if (response.success && response.data) {
         setBrandkitStatus(response.data);
-        console.log('✅ Brandkit status loaded:', response.data);
+        // Brandkit status loaded
       }
     } catch (err) {
       console.warn('⚠️ Failed to load brandkit status:', err);
@@ -69,12 +69,11 @@ export function ContentstackApp() {
     setError(null);
     
     try {
-      console.log('🔍 Loading data from Contentstack...');
+      // Loading data from Contentstack
       setConnectionStatus('connecting');
       
       // Get content types from Contentstack using the working approach
       const contentTypesResult = await contentstack.contentType().find();
-      console.log('� Content types result:', contentTypesResult);
       
       if (!contentTypesResult.content_types || contentTypesResult.content_types.length === 0) {
         throw new Error('No content types found');
@@ -89,7 +88,7 @@ export function ContentstackApp() {
       for (const ctRaw of contentTypesResult.content_types) {
         // Assert the type of ctRaw
         const ct = ctRaw as { uid: string; title?: string };
-        console.log(`📋 Processing content type: ${ct.uid}`);
+        // Processing content type
         
         try {
           // Get entries for this content type using your server API
@@ -108,7 +107,7 @@ export function ContentstackApp() {
               status: 'published'
             });
             
-            console.log(`✅ ${ct.uid}: ${entryCount} entries`);
+            // Content type processed
           } else {
             console.warn(`⚠️ API error for ${ct.uid}:`, apiResult.error);
             contentTypeData.push({
@@ -123,7 +122,6 @@ export function ContentstackApp() {
           // Add delay to avoid rate limiting
           await new Promise(resolve => setTimeout(resolve, 500));
         } catch (err) {
-          console.warn(`⚠️ Failed to load entries for ${ct.uid}:`, err);
           contentTypeData.push({
             uid: ct.uid,
             title: ct.title || ct.uid,
@@ -142,15 +140,11 @@ export function ContentstackApp() {
         pendingSuggestions: 0,
         lastSync: new Date().toISOString()
       });
-
-      console.log('🎉 Data loading completed!');
-      console.log(`📊 Summary: ${contentTypeData.length} content types, ${totalEntries} total entries`);
       
       // Load brandkit status
       await loadBrandkitStatus();
       
     } catch (err) {
-      console.error('❌ Error loading data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load data');
       setConnectionStatus('disconnected');
     } finally {
@@ -164,7 +158,6 @@ export function ContentstackApp() {
     
     // Disable real-time sync temporarily to avoid rate limiting
     // const unsubscribe = subscribeToContentUpdates((data) => {
-    //   console.log('Real-time update received:', data);
     //   loadData();
     // });
     
@@ -206,19 +199,17 @@ export function ContentstackApp() {
 
   const handleBrandkitSync = async () => {
     try {
-      console.log('🔄 Starting brandkit sync...');
+      // Starting brandkit sync
       const response = await enhancedApi.syncBrandkit();
       if (response.success) {
-        console.log('✅ Brandkit sync completed:', response.data);
+        // Brandkit sync completed
         // Reload brandkit status after sync
         await loadBrandkitStatus();
         // Also reload all data
         await loadData();
       } else {
-        console.error('❌ Brandkit sync failed:', response);
       }
     } catch (err) {
-      console.error('❌ Brandkit sync error:', err);
     }
   };
 
@@ -246,11 +237,11 @@ export function ContentstackApp() {
   };
 
   const handlePreviewGenerated = (preview: unknown) => {
-    console.log('Preview generated:', preview);
+    // Preview generated
   };
 
   const handleChangesApplied = (result: unknown) => {
-    console.log('Changes applied:', result);
+    // Changes applied
     // Refresh data after changes
     loadData();
   };
@@ -296,7 +287,7 @@ export function ContentstackApp() {
           <BulkOperationsInterface
             selectedContentType={selectedContentType}
             onJobCreated={(jobId) => {
-              console.log('Bulk job created:', jobId);
+              // Bulk job created
               // Refresh data after job creation
               loadData();
             }}
@@ -307,7 +298,7 @@ export function ContentstackApp() {
         return (
           <SuggestionsInterface
             onSuggestionApplied={(suggestion) => {
-              console.log('Suggestion applied:', suggestion);
+              // Suggestion applied
               // Could trigger a refresh or other actions
             }}
           />
@@ -317,7 +308,6 @@ export function ContentstackApp() {
         return (
           <NERInterface
             onEntitySelect={(entity) => {
-              console.log('Entity selected:', entity);
               // Could trigger actions based on entity selection
             }}
           />
@@ -341,7 +331,7 @@ export function ContentstackApp() {
           <AITextAnalyzer
             contentTypeUid={selectedContentType}
             onSuggestionApply={(suggestion) => {
-              console.log('Suggestion applied:', suggestion);
+              // Suggestion applied
             }}
           />
         );

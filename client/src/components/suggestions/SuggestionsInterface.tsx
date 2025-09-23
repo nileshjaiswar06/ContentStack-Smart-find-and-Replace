@@ -140,10 +140,9 @@ export function SuggestionsInterface({ onSuggestionApplied }: SuggestionsInterfa
         const brandkitResponse = await enhancedApi.getBrandkitSuggestions(inputText, { contentTypeUid: 'general' });
         if (brandkitResponse.success && brandkitResponse.data.suggestions) {
           setBrandkitSuggestions(brandkitResponse.data.suggestions);
-          console.log('✅ Brandkit suggestions loaded:', brandkitResponse.data.suggestions.length);
+          // Brandkit suggestions loaded
         }
       } catch (err) {
-        console.warn('⚠️ Failed to load brandkit suggestions:', err);
       }
 
       // Get tone analysis
@@ -151,7 +150,7 @@ export function SuggestionsInterface({ onSuggestionApplied }: SuggestionsInterfa
         const toneResponse = await enhancedApi.analyzeTone(inputText, { targetTone: 'professional' });
         if (toneResponse.success && toneResponse.data) {
           setToneAnalysis(toneResponse);
-          console.log('✅ Tone analysis completed:', toneResponse.data.overallTone);
+          // Tone analysis completed
         }
       } catch (err) {
         console.warn('⚠️ Failed to analyze tone:', err);
@@ -225,7 +224,7 @@ export function SuggestionsInterface({ onSuggestionApplied }: SuggestionsInterfa
   };
 
   const handleApplySuggestion = (suggestion: Suggestion) => {
-    console.log('Applying suggestion:', suggestion);
+      // Applying suggestion
     onSuggestionApplied?.(suggestion);
   };
 
@@ -248,7 +247,7 @@ export function SuggestionsInterface({ onSuggestionApplied }: SuggestionsInterfa
   };
 
   const handleApplyBrandkitSuggestion = (suggestion: BrandkitSuggestion) => {
-    console.log('Applying brandkit suggestion:', suggestion);
+      // Applying brandkit suggestion
     // You can implement specific brandkit suggestion application logic here
   };
 

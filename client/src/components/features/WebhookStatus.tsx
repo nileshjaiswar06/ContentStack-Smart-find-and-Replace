@@ -38,7 +38,7 @@ export function WebhookStatusComponent({
       const response = await enhancedApi.getWebhookStatus(environment, branch);
       if (response.success && response.data) {
         setWebhookStatus(response.data);
-        console.log('✅ Webhook status loaded:', response.data);
+        // Webhook status loaded
       } else {
         setError('Failed to load webhook status');
       }

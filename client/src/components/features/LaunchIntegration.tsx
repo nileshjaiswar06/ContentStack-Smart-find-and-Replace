@@ -40,7 +40,7 @@ export function LaunchIntegration({
       const response = await enhancedApi.getLaunchConfig(environment, branch);
       if (response.success && response.data) {
         setLaunchConfig(response.data);
-        console.log('✅ Launch config loaded:', response.data);
+        // Launch config loaded
       } else {
         setError('Failed to load Launch configuration');
       }
@@ -62,7 +62,7 @@ export function LaunchIntegration({
     try {
       const response = await enhancedApi.executeLaunchAction({ action, data }, environment, branch);
       if (response.success) {
-        console.log(`✅ Launch action ${action} completed:`, response.data);
+        // Launch action completed
         // Show success message or update UI
       } else {
         console.error(`❌ Launch action ${action} failed:`, response.error);

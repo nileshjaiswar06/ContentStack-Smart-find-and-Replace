@@ -137,13 +137,13 @@ export function NERInterface({ initialText = '', onEntitySelect }: NERInterfaceP
     setNerResult(null);
 
     try {
-      console.log('🔍 Analyzing text with spaCy NER...');
+      // Analyzing text with spaCy NER
       
       const response = await enhancedApi.getNEREntities(inputText, selectedModel, minConfidence);
-      console.log('📊 spaCy NER Response:', response);
+      // spaCy NER Response received
 
       setNerResult(response);
-      console.log(`✅ Found ${response.entities?.length || 0} entities`);
+      // Entities found
     } catch (err) {
       console.error('❌ Error getting NER entities:', err);
       setError(err instanceof Error ? err.message : 'Failed to get NER entities');
@@ -164,13 +164,13 @@ export function NERInterface({ initialText = '', onEntitySelect }: NERInterfaceP
     setBatchResult(null);
 
     try {
-      console.log('🔍 Analyzing batch with spaCy NER...');
+      // Analyzing batch with spaCy NER
       
       const response = await enhancedApi.getBatchNEREntities(validTexts, selectedModel, minConfidence);
-      console.log('📊 spaCy Batch NER Response:', response);
+      // spaCy Batch NER Response received
 
       setBatchResult(response);
-      console.log(`✅ Processed ${validTexts.length} texts`);
+      // Batch processing completed
     } catch (err) {
       console.error('❌ Error getting batch NER entities:', err);
       setError(err instanceof Error ? err.message : 'Failed to get batch NER entities');
@@ -180,7 +180,7 @@ export function NERInterface({ initialText = '', onEntitySelect }: NERInterfaceP
   };
 
   const handleEntityClick = (entity: NEREntity) => {
-    console.log('Entity selected:', entity);
+    // Entity selected
     onEntitySelect?.(entity);
   };
 
