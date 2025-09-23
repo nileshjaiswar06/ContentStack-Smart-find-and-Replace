@@ -7,6 +7,8 @@ import { ContentstackDashboard } from '@/components/dashboard/ContentstackDashbo
 import { ContentTypesView } from '@/components/content-types/ContentTypesView';
 import { SmartReplaceInterface } from '@/components/smart-replace/SmartReplaceInterface';
 import { BulkOperationsInterface } from '@/components/bulk-operations/BulkOperationsInterface';
+import { SuggestionsInterface } from '@/components/suggestions/SuggestionsInterface';
+import { AITextAnalyzer } from '@/components/features/AITextAnalyzer';
 import { ContentTypeEntry } from '@/lib/enhanced-api';
 // import { useRealtimeSync } from '@/lib/realtime-sync';
 import { contentstack } from '@/lib/contentstack';
@@ -195,6 +197,9 @@ export function ContentstackApp() {
       case 'bulk':
         setActiveTab('bulk');
         break;
+      case 'suggestions':
+        setActiveTab('suggestions');
+        break;
       case 'sync':
         loadData();
         break;
@@ -258,6 +263,16 @@ export function ContentstackApp() {
           />
         );
       
+      case 'suggestions':
+        return (
+          <SuggestionsInterface
+            onSuggestionApplied={(suggestion) => {
+              console.log('Suggestion applied:', suggestion);
+              // Could trigger a refresh or other actions
+            }}
+          />
+        );
+      
       case 'history':
         return (
           <div className="space-y-6">
@@ -273,15 +288,12 @@ export function ContentstackApp() {
       
       case 'analytics':
         return (
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
-              <p className="text-gray-600">View usage statistics and performance metrics</p>
-            </div>
-            <div className="text-center py-12">
-              <p className="text-gray-500">Analytics interface coming soon...</p>
-            </div>
-          </div>
+          <AITextAnalyzer
+            contentTypeUid={selectedContentType}
+            onSuggestionApply={(suggestion) => {
+              console.log('Suggestion applied:', suggestion);
+            }}
+          />
         );
       
       case 'settings':

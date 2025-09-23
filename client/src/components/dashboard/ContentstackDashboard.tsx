@@ -15,7 +15,8 @@ import {
   AlertTriangle,
   RefreshCw,
   Zap,
-  BarChart3
+  BarChart3,
+  Lightbulb
 } from 'lucide-react';
 
 interface ContentType {
@@ -82,6 +83,7 @@ export function ContentstackDashboard({
     { id: 'find', label: 'Find Content', icon: FileText, color: 'bg-blue-600' },
     { id: 'replace', label: 'Smart Replace', icon: Zap, color: 'bg-green-600' },
     { id: 'bulk', label: 'Bulk Operations', icon: BarChart3, color: 'bg-purple-600' },
+    { id: 'suggestions', label: 'AI Suggestions', icon: Lightbulb, color: 'bg-yellow-600' },
     { id: 'sync', label: 'Sync All', icon: RefreshCw, color: 'bg-indigo-600' },
   ];
 
@@ -171,7 +173,7 @@ export function ContentstackDashboard({
       {/* Quick Actions */}
       <Card className="p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           {quickActions.map((action) => {
             const Icon = action.icon;
             return (

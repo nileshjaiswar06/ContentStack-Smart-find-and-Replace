@@ -1,4 +1,4 @@
-import { SearchResult, ReplacementPlan, SearchFilters } from '../types';
+// Removed unused imports
 import { config } from './config';
 
 const API_BASE = config.api.baseUrl;
@@ -13,7 +13,7 @@ export interface ContentTypeEntry {
   created_at?: string;
   status?: string;
   _version?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface ServerListResponse {
@@ -73,15 +73,15 @@ export interface ServerPreviewResponse {
     reason: string;
     source: string;
     context: string;
-    domainContext: any;
+    domainContext: Record<string, unknown>;
     domainAdjustedConfidence: number;
     relevanceScore: number;
-    scoringMetrics: any;
+    scoringMetrics: Record<string, unknown>;
     scoreExplanation: string[];
     suggestionId: string;
     autoApply: boolean;
   }>;
-  appliedSuggestions: any;
+  appliedSuggestions: unknown;
   timestamp: string;
 }
 
@@ -119,7 +119,7 @@ export interface ServerApplyResponse {
     updated_at: string;
   };
   replacedCount: number;
-  appliedSuggestions: any;
+  appliedSuggestions: unknown;
   timestamp: string;
 }
 
@@ -164,7 +164,7 @@ export interface JobStatusResponse {
   job: {
     id: string;
     status: 'pending' | 'processing' | 'completed' | 'failed';
-    payload: any;
+    payload: Record<string, unknown>;
     progress: number;
     createdAt: string;
     updatedAt: string;
@@ -179,10 +179,10 @@ export interface JobStatusResponse {
           _version: number;
         };
       }>;
-      entryErrors: any[];
+      entryErrors: unknown[];
       hasErrors: boolean;
     };
-    entryErrors: any[];
+    entryErrors: unknown[];
   };
   requestId: string;
 }
@@ -306,7 +306,7 @@ export class EnhancedApiClient {
     request: BulkPreviewRequest,
     environment = 'development',
     branch = 'main'
-  ): Promise<any> {
+  ): Promise<unknown> {
     return this.request(`/api/replace/bulk-preview?environment=${environment}&branch=${branch}`, {
       method: 'POST',
       body: JSON.stringify(request),
@@ -360,7 +360,7 @@ export class EnhancedApiClient {
     contentTypeUid?: string,
     environment = 'development',
     branch = 'main'
-  ): Promise<any> {
+  ): Promise<unknown> {
     return this.request(`/api/replace/suggest?environment=${environment}&branch=${branch}`, {
       method: 'POST',
       body: JSON.stringify({ text, contentTypeUid }),
@@ -373,7 +373,7 @@ export class EnhancedApiClient {
     contentTypeUid?: string,
     environment = 'development',
     branch = 'main'
-  ): Promise<any> {
+  ): Promise<unknown> {
     return this.request(`/api/replace/suggest/batch?environment=${environment}&branch=${branch}`, {
       method: 'POST',
       body: JSON.stringify({ texts, contentTypeUid }),

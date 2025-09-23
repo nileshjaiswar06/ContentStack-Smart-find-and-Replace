@@ -1,4 +1,4 @@
-import Contentstack from '@contentstack/delivery-sdk';
+import Contentstack, { Region } from '@contentstack/delivery-sdk';
 import { config } from './config';
 
 // Contentstack configuration
@@ -6,7 +6,7 @@ const contentstackConfig = {
   apiKey: config.contentstack.apiKey,
   deliveryToken: config.contentstack.deliveryToken,
   environment: config.contentstack.environment,
-  region: config.contentstack.region as any,
+  region: Region[config.contentstack.region as keyof typeof Region],
   livePreview: {
     enable: config.features.enableLivePreview,
     host: config.contentstack.livePreviewHost,
@@ -21,14 +21,18 @@ export type ContentType = string;
 
 // Real-time content fetching with caching
 export class ContentstackService {
-  private cache = new Map<string, { data: any; timestamp: number }>();
+  private cache = new Map<string, { data: unknown; timestamp: number }>();
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
   async getContentTypes(): Promise<ContentType[]> {
     try {
       // Fetch all content types from Contentstack CMS
       const result = await contentstack.contentType().find();
-      return result.entries?.map((ct: any) => ct.uid) || [];
+      interface ContentTypeResponse {
+        uid: string;
+        [key: string]: unknown;
+      }
+      return (result.content_types as ContentTypeResponse[] | undefined)?.map((ct) => ct.uid) || [];
     } catch (error) {
       console.error('Error fetching content types from CMS:', error);
       throw error; // Don't fallback, let the error propagate
@@ -40,12 +44,12 @@ export class ContentstackService {
     branch?: string;
     limit?: number;
     skip?: number;
-  } = {}): Promise<any> {
+  } = {}): Promise<{ entries: unknown[]; [key: string]: unknown }> {
     const cacheKey = `entries_${contentType}_${JSON.stringify(options)}`;
     const cached = this.cache.get(cacheKey);
     
     if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
-      return cached.data;
+      return cached.data as { entries: unknown[]; [key: string]: unknown };
     }
 
     try {
@@ -61,7 +65,7 @@ export class ContentstackService {
         timestamp: Date.now()
       });
       
-      return result;
+      return result as { entries: unknown[]; [key: string]: unknown };
     } catch (error) {
       console.error(`Error fetching ${contentType} entries:`, error);
       throw error;
@@ -71,7 +75,7 @@ export class ContentstackService {
   async getEntry(contentType: ContentType, entryUid: string, options: {
     environment?: string;
     branch?: string;
-  } = {}): Promise<any> {
+  } = {}): Promise<unknown> {
     const cacheKey = `entry_${contentType}_${entryUid}_${JSON.stringify(options)}`;
     const cached = this.cache.get(cacheKey);
     

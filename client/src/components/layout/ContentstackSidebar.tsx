@@ -17,7 +17,8 @@ import {
   Zap,
   Clock,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Lightbulb
 } from 'lucide-react';
 
 interface ContentstackSidebarProps {
@@ -46,6 +47,7 @@ export function ContentstackSidebar({
     { id: 'find', label: 'Find Content', icon: Search },
     { id: 'replace', label: 'Smart Replace', icon: Replace },
     { id: 'bulk', label: 'Bulk Operations', icon: Zap },
+    { id: 'suggestions', label: 'AI Suggestions', icon: Lightbulb },
     { id: 'history', label: 'History', icon: History },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'settings', label: 'Settings', icon: Settings },

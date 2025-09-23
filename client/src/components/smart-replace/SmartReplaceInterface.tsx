@@ -1,27 +1,21 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Search, 
   Replace, 
-  Zap, 
   Eye, 
-  CheckCircle, 
   AlertTriangle,
   RefreshCw,
   Settings,
   Play,
-  Pause,
-  RotateCcw,
   Brain,
   Target,
-  Clock,
   FileText,
   Package,
   Tag
@@ -33,6 +27,14 @@ interface SmartReplaceInterfaceProps {
   selectedEntries?: string[];
   onPreviewGenerated: (preview: ServerPreviewResponse) => void;
   onChangesApplied: (result: ServerApplyResponse) => void;
+}
+
+interface AISuggestion {
+  originalText: string;
+  suggestedReplacement: string;
+  confidence: number;
+  reason: string;
+  source: string;
 }
 
 export function SmartReplaceInterface({
@@ -53,7 +55,7 @@ export function SmartReplaceInterface({
   const [preview, setPreview] = useState<ServerPreviewResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [aiSuggestions, setAiSuggestions] = useState<any[]>([]);
+  const [aiSuggestions, setAiSuggestions] = useState<AISuggestion[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const contentTypes = [
@@ -102,8 +104,8 @@ export function SmartReplaceInterface({
   };
 
   const handleApplyChanges = async () => {
-    if (!preview || !selectedContentType || selectedEntries.length === 0) {
-      setError('No preview available to apply');
+    if (!findText || !selectedContentType || selectedEntries.length === 0) {
+      setError('Please enter find text, select content type and entries');
       return;
     }
 
@@ -129,7 +131,7 @@ export function SmartReplaceInterface({
       const response = await enhancedApi.applyReplace(request);
       onChangesApplied(response);
       
-      // Refresh preview after applying
+      // Generate preview after applying to show results
       await handleGeneratePreview();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to apply changes');
@@ -138,16 +140,17 @@ export function SmartReplaceInterface({
     }
   };
 
-  const handleGetSuggestions = async () => {
+  const handleGetSuggestions = useCallback(async () => {
     if (!findText) return;
 
     try {
       const response = await enhancedApi.getSuggestions(findText, selectedContentType);
-      setAiSuggestions(response.suggestions || []);
+      const suggestionsResponse = response as { suggestions?: AISuggestion[] };
+      setAiSuggestions(suggestionsResponse.suggestions || []);
     } catch (err) {
       console.warn('Failed to get AI suggestions:', err);
     }
-  };
+  }, [findText, selectedContentType]);
 
   useEffect(() => {
     if (findText && selectedContentType && findText.length > 2) {
@@ -156,7 +159,7 @@ export function SmartReplaceInterface({
       }, 2000); // Increased debounce time
       return () => clearTimeout(timeoutId);
     }
-  }, [findText, selectedContentType]);
+  }, [findText, selectedContentType, handleGetSuggestions]);
 
   const getSuggestionColor = (source: string) => {
     switch (source) {
@@ -300,7 +303,7 @@ export function SmartReplaceInterface({
               
               <Button
                 onClick={handleApplyChanges}
-                disabled={loading || !preview}
+                disabled={loading || !findText || !selectedContentType || selectedEntries.length === 0}
                 variant="default"
                 className="flex items-center space-x-2"
               >

@@ -17,25 +17,26 @@ export async function debugContentstackConnection() {
     console.log('📋 Step 1: Fetching content types...');
     const contentTypesResult = await contentstack.contentType().find();
     console.log('✅ Content types result:', contentTypesResult);
-    console.log('📊 Found content types:', contentTypesResult.entries?.length || 0);
+    console.log('📊 Found content types:', (contentTypesResult as any).content_types?.length || 0);
     
-    if (contentTypesResult.entries && contentTypesResult.entries.length > 0) {
-      console.log('📝 Content type UIDs:', contentTypesResult.entries.map((ct: any) => ct.uid));
+    if ((contentTypesResult as any).content_types && (contentTypesResult as any).content_types.length > 0) {
+      console.log('📝 Content type UIDs:', (contentTypesResult as any).content_types.map((ct: any) => ct.uid));
       
       // Test 2: Try to get entries for the first content type
-      const firstContentType = contentTypesResult.entries[0].uid;
+      const firstContentType = (contentTypesResult as any).content_types[0].uid;
       console.log(`📄 Step 2: Fetching entries for ${firstContentType}...`);
       
       try {
         const entriesResult = await contentstack.contentType(firstContentType).entry().find();
         console.log('✅ Entries result:', entriesResult);
-        console.log('📊 Found entries:', entriesResult.entries?.length || 0);
+        console.log('📊 Found entries:', (entriesResult as any).entries?.length || 0);
         
-        if (entriesResult.entries && entriesResult.entries.length > 0) {
+        if ((entriesResult as any).entries && (entriesResult as any).entries.length > 0) {
+          const firstEntry = (entriesResult as any).entries[0];
           console.log('📝 Sample entry:', {
-            uid: entriesResult.entries[0].uid,
-            title: entriesResult.entries[0].title || entriesResult.entries[0].name,
-            contentType: entriesResult.entries[0]._content_type_uid
+            uid: firstEntry.uid,
+            title: firstEntry.title || firstEntry.name,
+            contentType: firstEntry._content_type_uid
           });
         }
       } catch (entryError) {
