@@ -380,6 +380,30 @@ export class EnhancedApiClient {
     });
   }
 
+  // Get NER entities for text
+  async getNEREntities(
+    text: string,
+    environment = 'development',
+    branch = 'main'
+  ): Promise<unknown> {
+    return this.request(`/api/ner?environment=${environment}&branch=${branch}`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
+  }
+
+  // Get NER entities for multiple texts
+  async getBatchNEREntities(
+    texts: string[],
+    environment = 'development',
+    branch = 'main'
+  ): Promise<unknown> {
+    return this.request(`/api/ner/batch?environment=${environment}&branch=${branch}`, {
+      method: 'POST',
+      body: JSON.stringify({ texts }),
+    });
+  }
+
   // Poll job status until completion
   async pollJobStatus(
     jobId: string,

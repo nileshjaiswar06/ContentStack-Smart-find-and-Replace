@@ -9,6 +9,7 @@ import { SmartReplaceInterface } from '@/components/smart-replace/SmartReplaceIn
 import { BulkOperationsInterface } from '@/components/bulk-operations/BulkOperationsInterface';
 import { SuggestionsInterface } from '@/components/suggestions/SuggestionsInterface';
 import { AITextAnalyzer } from '@/components/features/AITextAnalyzer';
+import { NERInterface } from '@/components/features/NERInterface';
 import { ContentTypeEntry } from '@/lib/enhanced-api';
 // import { useRealtimeSync } from '@/lib/realtime-sync';
 import { contentstack } from '@/lib/contentstack';
@@ -200,6 +201,9 @@ export function ContentstackApp() {
       case 'suggestions':
         setActiveTab('suggestions');
         break;
+      case 'ner':
+        setActiveTab('ner');
+        break;
       case 'sync':
         loadData();
         break;
@@ -269,6 +273,16 @@ export function ContentstackApp() {
             onSuggestionApplied={(suggestion) => {
               console.log('Suggestion applied:', suggestion);
               // Could trigger a refresh or other actions
+            }}
+          />
+        );
+      
+      case 'ner':
+        return (
+          <NERInterface
+            onEntitySelect={(entity) => {
+              console.log('Entity selected:', entity);
+              // Could trigger actions based on entity selection
             }}
           />
         );

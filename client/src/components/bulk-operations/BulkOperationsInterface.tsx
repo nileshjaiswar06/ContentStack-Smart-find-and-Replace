@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,22 +8,38 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Zap, 
-  Play, 
-  Pause, 
-  RotateCcw,
   CheckCircle,
   AlertTriangle,
-  Clock,
   FileText,
   Package,
   Tag,
   Database,
   RefreshCw,
-  Eye,
-  Settings,
-  BarChart3
+  Eye
 } from 'lucide-react';
 import { enhancedApi, BulkApplyRequest, BulkPreviewRequest, JobStatusResponse } from '@/lib/enhanced-api';
+
+// Type definitions
+interface ContentStackEntry {
+  uid: string;
+  title?: string;
+  name?: string;
+}
+
+interface ContentTypeWithEntries {
+  uid: string;
+  name: string;
+  icon: React.ComponentType<{ className?: string }>;
+  color: string;
+  entries: ContentStackEntry[];
+  count: number;
+}
+
+interface BulkPreviewResponse {
+  totalEntries: number;
+  totalChanges: number;
+  processedCount: number;
+}
 
 interface BulkOperationsInterfaceProps {
   selectedContentType?: string;
@@ -31,7 +47,7 @@ interface BulkOperationsInterfaceProps {
 }
 
 export function BulkOperationsInterface({ selectedContentType, onJobCreated }: BulkOperationsInterfaceProps) {
-  const [contentTypes, setContentTypes] = useState<any[]>([]);
+  const [contentTypes, setContentTypes] = useState<ContentTypeWithEntries[]>([]);
   const [selectedEntries, setSelectedEntries] = useState<string[]>([]);
   const [findText, setFindText] = useState('');
   const [replaceText, setReplaceText] = useState('');
@@ -41,7 +57,7 @@ export function BulkOperationsInterface({ selectedContentType, onJobCreated }: B
     useRegex: false,
     dryRun: true
   });
-  const [preview, setPreview] = useState<any>(null);
+  const [preview, setPreview] = useState<BulkPreviewResponse | null>(null);
   const [jobs, setJobs] = useState<JobStatusResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +73,7 @@ export function BulkOperationsInterface({ selectedContentType, onJobCreated }: B
     loadJobs();
   }, []);
 
-  const loadContentTypes = async () => {
+  const loadContentTypes = useCallback(async () => {
     try {
       const contentTypeData = [];
       for (const ct of contentTypesList) {
@@ -68,8 +84,8 @@ export function BulkOperationsInterface({ selectedContentType, onJobCreated }: B
             entries: response.data.entries,
             count: response.data.count
           });
-        } catch (err) {
-          console.warn(`Failed to load ${ct.uid}:`, err);
+        } catch (error) {
+          console.warn(`Failed to load ${ct.uid}:`, error);
           contentTypeData.push({
             ...ct,
             entries: [],
@@ -78,10 +94,10 @@ export function BulkOperationsInterface({ selectedContentType, onJobCreated }: B
         }
       }
       setContentTypes(contentTypeData);
-    } catch (err) {
+    } catch (error) {
       setError('Failed to load content types');
     }
-  };
+  }, []);
 
   const loadJobs = async () => {
     // Mock job data - in real implementation, you'd fetch from an API
@@ -91,7 +107,7 @@ export function BulkOperationsInterface({ selectedContentType, onJobCreated }: B
   const handleContentTypeSelect = (contentType: string) => {
     const ct = contentTypes.find(c => c.uid === contentType);
     if (ct) {
-      setSelectedEntries(ct.entries.map((entry: any) => entry.uid));
+      setSelectedEntries(ct.entries.map((entry: ContentStackEntry) => entry.uid));
     }
   };
 
@@ -106,7 +122,7 @@ export function BulkOperationsInterface({ selectedContentType, onJobCreated }: B
   const handleSelectAll = () => {
     const currentContentType = contentTypes.find(ct => ct.uid === selectedContentType);
     if (currentContentType) {
-      setSelectedEntries(currentContentType.entries.map((entry: any) => entry.uid));
+      setSelectedEntries(currentContentType.entries.map((entry: ContentStackEntry) => entry.uid));
     }
   };
 
@@ -137,9 +153,9 @@ export function BulkOperationsInterface({ selectedContentType, onJobCreated }: B
       };
 
       const response = await enhancedApi.bulkPreview(request);
-      setPreview(response);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate preview');
+      setPreview(response as BulkPreviewResponse);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to generate preview');
     } finally {
       setLoading(false);
     }
@@ -173,8 +189,8 @@ export function BulkOperationsInterface({ selectedContentType, onJobCreated }: B
       
       // Start polling for job status
       pollJobStatus(response.jobId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start bulk operation');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to start bulk operation');
     } finally {
       setLoading(false);
     }
@@ -184,8 +200,8 @@ export function BulkOperationsInterface({ selectedContentType, onJobCreated }: B
     try {
       const status = await enhancedApi.pollJobStatus(jobId);
       setJobs(prev => [...prev.filter(j => j.job.id !== jobId), status]);
-    } catch (err) {
-      console.error('Failed to poll job status:', err);
+    } catch (error) {
+      console.error('Failed to poll job status:', error);
     }
   };
 
@@ -199,9 +215,6 @@ export function BulkOperationsInterface({ selectedContentType, onJobCreated }: B
     }
   };
 
-  const getContentTypeInfo = (uid: string) => {
-    return contentTypesList.find(ct => ct.uid === uid) || contentTypesList[0];
-  };
 
   return (
     <div className="space-y-6">
@@ -286,7 +299,7 @@ export function BulkOperationsInterface({ selectedContentType, onJobCreated }: B
             {selectedContentType ? (
               contentTypes
                 .find(ct => ct.uid === selectedContentType)
-                ?.entries.map((entry: any) => (
+                ?.entries.map((entry: ContentStackEntry) => (
                   <div
                     key={entry.uid}
                     className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50"
@@ -456,10 +469,10 @@ export function BulkOperationsInterface({ selectedContentType, onJobCreated }: B
                     </Badge>
                     <div>
                       <p className="font-medium text-gray-900">
-                        Bulk operation on {job.job.payload.contentTypeUid}
+                        Bulk operation on {(job.job.payload as unknown as BulkApplyRequest).contentTypeUid}
                       </p>
                       <p className="text-sm text-gray-500">
-                        {job.job.payload.entryUids.length} entries • 
+                        {(job.job.payload as unknown as BulkApplyRequest).entryUids?.length || 0} entries • 
                         Created {new Date(job.job.createdAt).toLocaleString()}
                       </p>
                     </div>

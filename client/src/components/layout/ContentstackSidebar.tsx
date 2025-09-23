@@ -18,7 +18,8 @@ import {
   Clock,
   CheckCircle,
   AlertCircle,
-  Lightbulb
+  Lightbulb,
+  Target
 } from 'lucide-react';
 
 interface ContentstackSidebarProps {
@@ -48,6 +49,7 @@ export function ContentstackSidebar({
     { id: 'replace', label: 'Smart Replace', icon: Replace },
     { id: 'bulk', label: 'Bulk Operations', icon: Zap },
     { id: 'suggestions', label: 'AI Suggestions', icon: Lightbulb },
+    { id: 'ner', label: 'Entity Recognition', icon: Target },
     { id: 'history', label: 'History', icon: History },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'settings', label: 'Settings', icon: Settings },
