@@ -30,16 +30,16 @@ A modern, real-time client application for Contentstack CMS with AI-powered smar
 ## Getting Started
 
 ### Prerequisites
-- Node.js 18+ 
+- Node.js 18+
 - Your Contentstack server running on `http://localhost:3001`
 - Contentstack API credentials
 
 ### Installation
 
 1. **Install dependencies**:
-   ```bash
-   npm install
-   ```
+```bash
+npm install
+```
 
 2. **Configure environment variables**:
    Create a `.env.local` file in the client directory:
@@ -57,9 +57,9 @@ A modern, real-time client application for Contentstack CMS with AI-powered smar
    ```
 
 3. **Start the development server**:
-   ```bash
-   npm run dev
-   ```
+```bash
+npm run dev
+```
 
 4. **Open your browser**:
    Navigate to `http://localhost:3000`

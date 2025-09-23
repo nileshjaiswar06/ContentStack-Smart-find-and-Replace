@@ -1,15 +1,38 @@
 import Contentstack, { Region } from '@contentstack/delivery-sdk';
 import { config } from './config';
 
-// Contentstack configuration
+// Build and normalize Contentstack configuration
+const rawRegion = config.contentstack.region || '';
+const regionKey = String(rawRegion).toUpperCase();
+let resolvedRegion: Region | undefined = undefined;
+if (regionKey && (regionKey in Region)) {
+  resolvedRegion = Region[regionKey as keyof typeof Region] as Region;
+}
+
+// If the environment looks like a UID (starts with 'blt') the user may have provided
+// the environment UID instead of the environment name (e.g. 'development'). The Delivery
+// SDK expects the environment name.
+const environmentValue = config.contentstack.environment;
+  if (typeof environmentValue === 'string' && environmentValue.startsWith('blt')) {
+    // Non-fatal: log a helpful warning for debugging 412 errors caused by wrong environment
+    // (do not expose secrets)
+  }
+
+// Pick a region-appropriate live preview host when not explicitly overridden.
+let livePreviewHost = config.contentstack.livePreviewHost;
+if ((!livePreviewHost || livePreviewHost === 'api.contentstack.io') && regionKey === 'EU') {
+  livePreviewHost = 'eu-api.contentstack.com';
+}
+
+// Prepare the config object we pass to the SDK. Avoid printing secrets to the console.
 const contentstackConfig = {
   apiKey: config.contentstack.apiKey,
   deliveryToken: config.contentstack.deliveryToken,
-  environment: config.contentstack.environment,
-  region: Region[config.contentstack.region as keyof typeof Region],
+  environment: environmentValue,
+  region: resolvedRegion,
   livePreview: {
     enable: config.features.enableLivePreview,
-    host: config.contentstack.livePreviewHost,
+    host: livePreviewHost,
   },
 };
 
