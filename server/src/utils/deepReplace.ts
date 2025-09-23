@@ -1,6 +1,9 @@
 import { replaceWithCase } from "./text.js";
 import { replaceInRteDocImmutable } from "./richTextParser.js";
 import { canonicalizeUrlsInText } from "./urlCanonicalizer.js";
+import { processTableField, isTableField } from "./tableParser.js";
+import { processComponentField, isComponentField, isComponentGroup, processComponentGroup } from "./componentParser.js";
+import { processCustomFieldValue, isJsonField, isGroupField, isReferenceField, isFileField, isDateField, isNumberField, isBooleanField } from "./customFieldParser.js";
 import { logger } from "./logger.js";
 import { normalizeEntryForProcessing } from "../services/contentstackService.js";
 
@@ -67,7 +70,48 @@ export function deepReplace(
         return newRte;
       }
 
-      // clone object
+      // Handle table fields
+      if (isTableField(value)) {
+        const { table, replacedCount: tableCount } = processTableField(value, rx, replacement, {
+          updateUrls,
+          updateEmails
+        });
+        replacedCount += tableCount;
+        return table;
+      }
+
+      // Handle component fields
+      if (isComponentField(value)) {
+        const { processedValue, replacedCount: componentCount } = processComponentField(value, rx, replacement, {
+          updateUrls,
+          updateEmails
+        });
+        replacedCount += componentCount;
+        return processedValue;
+      }
+
+      // Handle component groups (arrays of components)
+      if (isComponentGroup(value)) {
+        const { components, replacedCount: groupCount } = processComponentGroup(value, rx, replacement, {
+          updateUrls,
+          updateEmails
+        });
+        replacedCount += groupCount;
+        return components;
+      }
+
+      // Handle custom field types
+      if (isJsonField(value) || isGroupField(value) || isReferenceField(value) || isFileField(value) || 
+          isDateField(value) || isNumberField(value) || isBooleanField(value)) {
+        const { processedValue, replacedCount: customCount } = processCustomFieldValue(value, rx, replacement, {
+          updateUrls,
+          updateEmails
+        });
+        replacedCount += customCount;
+        return processedValue;
+      }
+
+      // Handle regular objects
       const out: any = {};
       for (const [k, v] of Object.entries(value)) {
         out[k] = processValue(v);
@@ -92,6 +136,11 @@ export function processEntry(
 ) {
   // Normalize the entry structure for consistent processing
   const normalizedEntry = normalizeEntryForProcessing(entry);
+  
+  // Log field types being processed
+  const fieldTypes = analyzeFieldTypes(normalizedEntry);
+  logger.info(`Processing entry ${entryUid} with field types: ${JSON.stringify(fieldTypes)}`, requestId);
+  
   const { result, replacedCount } = deepReplace(normalizedEntry, rx, replacement, options);
   
   if (replacedCount > 0) {
@@ -99,4 +148,57 @@ export function processEntry(
   }
   
   return { result, replacedCount };
+}
+
+/**
+ * Analyze field types in an entry for logging
+ */
+function analyzeFieldTypes(obj: any, path: string = ''): Record<string, number> {
+  const fieldTypes: Record<string, number> = {};
+  
+  function analyzeValue(value: any, currentPath: string) {
+    if (value == null) return;
+    
+    if (typeof value === 'string') {
+      fieldTypes['string'] = (fieldTypes['string'] || 0) + 1;
+    } else if (typeof value === 'number') {
+      fieldTypes['number'] = (fieldTypes['number'] || 0) + 1;
+    } else if (typeof value === 'boolean') {
+      fieldTypes['boolean'] = (fieldTypes['boolean'] || 0) + 1;
+    } else if (Array.isArray(value)) {
+      fieldTypes['array'] = (fieldTypes['array'] || 0) + 1;
+      if (isComponentGroup(value)) {
+        fieldTypes['component_group'] = (fieldTypes['component_group'] || 0) + 1;
+      }
+      value.forEach((item, index) => analyzeValue(item, `${currentPath}[${index}]`));
+    } else if (typeof value === 'object') {
+      if (value && (value.content || value.children || value.nodeType)) {
+        fieldTypes['rich_text'] = (fieldTypes['rich_text'] || 0) + 1;
+      } else if (isTableField(value)) {
+        fieldTypes['table'] = (fieldTypes['table'] || 0) + 1;
+      } else if (isComponentField(value)) {
+        fieldTypes['component'] = (fieldTypes['component'] || 0) + 1;
+      } else if (isJsonField(value)) {
+        fieldTypes['json'] = (fieldTypes['json'] || 0) + 1;
+      } else if (isGroupField(value)) {
+        fieldTypes['group'] = (fieldTypes['group'] || 0) + 1;
+      } else if (isReferenceField(value)) {
+        fieldTypes['reference'] = (fieldTypes['reference'] || 0) + 1;
+      } else if (isFileField(value)) {
+        fieldTypes['file'] = (fieldTypes['file'] || 0) + 1;
+      } else if (isDateField(value)) {
+        fieldTypes['date'] = (fieldTypes['date'] || 0) + 1;
+      } else {
+        fieldTypes['object'] = (fieldTypes['object'] || 0) + 1;
+      }
+      
+      // Recursively analyze object properties
+      for (const [key, val] of Object.entries(value)) {
+        analyzeValue(val, currentPath ? `${currentPath}.${key}` : key);
+      }
+    }
+  }
+  
+  analyzeValue(obj, path);
+  return fieldTypes;
 }
