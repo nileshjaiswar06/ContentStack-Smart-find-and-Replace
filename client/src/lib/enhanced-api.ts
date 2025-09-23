@@ -644,13 +644,13 @@ export class EnhancedApiClient {
     });
   }
 
-  // Get NER entities for text using spaCy service
+  // Get NER entities for text using server NER API
   async getNEREntities(
     text: string,
     model = 'en_core_web_trf',
     minConfidence = 0.7
   ): Promise<SpacyNERResponse> {
-    const response = await fetch(`${config.spacy.baseUrl}/ner`, {
+    const response = await fetch(`${API_BASE}/api/ner`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -663,19 +663,19 @@ export class EnhancedApiClient {
     });
 
     if (!response.ok) {
-      throw new Error(`spaCy NER service error: ${response.status} ${response.statusText}`);
+      throw new Error(`NER service error: ${response.status} ${response.statusText}`);
     }
 
     return response.json();
   }
 
-  // Get NER entities for multiple texts using spaCy service
+  // Get NER entities for multiple texts using server NER API
   async getBatchNEREntities(
     texts: string[],
     model = 'en_core_web_trf',
     minConfidence = 0.7
   ): Promise<SpacyBatchResponse> {
-    const response = await fetch(`${config.spacy.baseUrl}/ner/batch`, {
+    const response = await fetch(`${API_BASE}/api/ner/batch`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -688,29 +688,29 @@ export class EnhancedApiClient {
     });
 
     if (!response.ok) {
-      throw new Error(`spaCy NER batch service error: ${response.status} ${response.statusText}`);
+      throw new Error(`NER batch service error: ${response.status} ${response.statusText}`);
     }
 
     return response.json();
   }
 
-  // Get spaCy service health status
+  // Get NER service health status through server
   async getSpacyHealth(): Promise<SpacyHealthResponse> {
-    const response = await fetch(`${config.spacy.baseUrl}/health`);
+    const response = await fetch(`${API_BASE}/api/ner/health`);
     
     if (!response.ok) {
-      throw new Error(`spaCy health check failed: ${response.status} ${response.statusText}`);
+      throw new Error(`NER health check failed: ${response.status} ${response.statusText}`);
     }
 
     return response.json();
   }
 
-  // Get available NER labels from spaCy service
+  // Get available NER labels through server
   async getSpacyLabels(): Promise<SpacyLabelsResponse> {
-    const response = await fetch(`${config.spacy.baseUrl}/labels`);
+    const response = await fetch(`${API_BASE}/api/ner/labels`);
     
     if (!response.ok) {
-      throw new Error(`spaCy labels fetch failed: ${response.status} ${response.statusText}`);
+      throw new Error(`NER labels fetch failed: ${response.status} ${response.statusText}`);
     }
 
     return response.json();

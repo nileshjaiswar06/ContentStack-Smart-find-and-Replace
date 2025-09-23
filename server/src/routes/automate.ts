@@ -126,7 +126,7 @@ router.put("/workflows/:id", async (req: Request, res: Response) => {
       });
     }
     
-    const success = updateWorkflow(id, updates);
+    const success = updateWorkflow(id as string, updates);
     
     if (!success) {
       return res.status(404).json({
@@ -135,7 +135,7 @@ router.put("/workflows/:id", async (req: Request, res: Response) => {
       });
     }
     
-    const workflow = getWorkflow(id);
+    const workflow = getWorkflow(id as string);
     
     res.json({
       success: true,
@@ -169,7 +169,7 @@ router.delete("/workflows/:id", async (req: Request, res: Response) => {
       });
     }
     
-    const success = deleteWorkflow(id);
+    const success = deleteWorkflow(id as string);
     
     if (!success) {
       return res.status(404).json({
