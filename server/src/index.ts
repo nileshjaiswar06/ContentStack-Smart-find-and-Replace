@@ -1,13 +1,14 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
-import routes from "./routes/replace.js";
+import routes from "./routes/index.js";
 import nerRoutes from "./routes/ner.js";
 import suggestRoutes from "./routes/suggest.js";
-import brandkitRoutes from "./routes/brandkit.js";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.js";
 import { requestLoggerMiddleware, helmetMiddleware, readLimiter, writeLimiter } from "./middlewares/requestSecurity.js";
 import requestIdMiddleware from "./middlewares/requestId.js";
+import { initializeAutomateService } from "./services/automateService.js";
+import { realtimeSyncService } from "./services/realtimeSyncService.js";
 
 // Load environment variables
 dotenv.config();
@@ -48,17 +49,21 @@ app.use('/api', (req, res, next) => {
 app.use("/api", routes);
 app.use("/api/ner", nerRoutes); // NER routes with their own rate limiting
 app.use("/api/suggest", suggestRoutes); // Suggestion routes
-// Brandkit admin and sync routes
-app.use("/api/brandkit", brandkitRoutes);
 app.get("/health", (req, res) => res.json({ ok: true, message: "Server healthy" }));
 
 // Error handling middleware (must be last)
 app.use(notFoundHandler);
 app.use(errorHandler);
 
+// Initialize services
+initializeAutomateService();
+realtimeSyncService.initialize();
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT} in ${process.env.NODE_ENV} mode`);
+  console.log(`Launch app available at: http://localhost:${PORT}/api/launch/app`);
+  console.log(`Webhooks available at: http://localhost:${PORT}/api/webhooks/`);
 });
 
 // Handle unhandled promise rejections
