@@ -1,178 +1,189 @@
-# Smart Find & Replace - Client Application
+# Contentstack Smart Find & Replace Client
 
-A professional, enterprise-grade frontend application for content management with verify-before-replace workflow.
+A modern, real-time client application for Contentstack CMS with AI-powered smart find and replace functionality.
 
-## 🏗️ Project Structure
+## Features
 
-```
-client/
-├── src/
-│   ├── app/
-│   │   ├── globals.css          # Global styles and Contentstack theme
-│   │   ├── layout.tsx           # Root layout component
-│   │   └── page.tsx             # Main application page
-│   ├── components/
-│   │   ├── layout/              # Layout components
-│   │   │   ├── Header.tsx       # Application header
-│   │   │   ├── Footer.tsx       # Application footer
-│   │   │   ├── Breadcrumb.tsx   # Navigation breadcrumb
-│   │   │   └── Tabs.tsx         # Tab navigation component
-│   │   ├── features/            # Feature-specific components
-│   │   │   ├── FindContent.tsx  # Content search interface
-│   │   │   ├── ReplaceSetup.tsx # Replacement configuration
-│   │   │   ├── PreviewVerify.tsx # Change preview and approval
-│   │   │   ├── History.tsx      # Operation history
-│   │   │   └── SearchResults.tsx # Search results display
-│   │   └── index.ts             # Component exports
-│   ├── hooks/
-│   │   └── useSmartFindReplace.ts # Main application logic hook
-│   ├── types/
-│   │   └── index.ts             # TypeScript type definitions
-│   └── lib/
-│       └── api.ts               # API integration utilities
-├── public/                      # Static assets
-├── styles/                      # Additional stylesheets
-├── package.json                 # Dependencies and scripts
-├── next.config.ts              # Next.js configuration
-├── tsconfig.json               # TypeScript configuration
-└── README.md                   # This file
-```
+### 🚀 Real-time Integration
+- **Dynamic Content Sync**: Automatically fetches new entries and content types from Contentstack CMS
+- **Live Updates**: Real-time synchronization with your Contentstack instance
+- **Auto-refresh**: Content updates every 30 seconds with manual refresh option
 
-## 🎯 Key Features
+### 🤖 AI-Powered Smart Replace
+- **Intelligent Suggestions**: AI-generated replacement suggestions based on context
+- **Multiple Sources**: Suggestions from AI, brand kit, contextual analysis, and heuristics
+- **Confidence Scoring**: Each suggestion includes confidence levels and reasoning
+- **Auto-apply**: High-confidence suggestions can be automatically applied
 
-### 1. **Verify-Before-Replace Workflow**
-- Users can preview all changes before applying them
-- Field-level granular control over replacements
-- Side-by-side diff comparison
-- Selective approval of changes
+### 📊 Content Management
+- **Content Types View**: Browse and manage all your content types
+- **Entry Management**: View, select, and manage individual entries
+- **Bulk Operations**: Perform operations on multiple entries simultaneously
+- **Preview & Verify**: Preview changes before applying them
 
-### 2. **Professional UI Design**
-- Contentstack-inspired design system
-- Full-page application (no sidebar)
-- Responsive layout for all screen sizes
-- Enterprise-grade appearance
+### 🎨 Contentstack UI Design
+- **Professional Interface**: Clean, modern design matching Contentstack's UI patterns
+- **Responsive Layout**: Works seamlessly on desktop and mobile devices
+- **Intuitive Navigation**: Easy-to-use sidebar and tab-based navigation
+- **Status Indicators**: Real-time connection status and operation feedback
 
-### 3. **Component Architecture**
-- Modular, reusable components
-- Clear separation of concerns
-- TypeScript for type safety
-- Custom hooks for state management
-
-## 🧩 Component Overview
-
-### Layout Components
-- **Header**: Application branding and navigation
-- **Footer**: Version info and help links
-- **Breadcrumb**: Navigation context
-- **Tabs**: Main feature navigation
-
-### Feature Components
-- **FindContent**: Search interface with filters
-- **ReplaceSetup**: Replacement configuration
-- **PreviewVerify**: Change preview and approval
-- **History**: Operation audit trail
-- **SearchResults**: Search results with field selection
-
-### Custom Hooks
-- **useSmartFindReplace**: Main application state and logic
-
-## 🎨 Design System
-
-### Colors
-- **Primary**: Indigo (#6366f1)
-- **Secondary**: Gray (#f1f5f9)
-- **Success**: Green (#10b981)
-- **Warning**: Yellow (#f59e0b)
-- **Error**: Red (#ef4444)
-
-### Typography
-- **Headers**: Inter/System fonts, 600-700 weight
-- **Body**: Inter/System fonts, 400-500 weight
-- **Sizes**: 12px-24px range
-
-### Components
-- **Cards**: Rounded corners, subtle shadows
-- **Buttons**: Consistent styling with hover states
-- **Inputs**: Focus states with primary color
-- **Tables**: Clean, professional data display
-
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
-- Node.js 18+
-- npm or yarn
+- Node.js 18+ 
+- Your Contentstack server running on `http://localhost:3001`
+- Contentstack API credentials
 
 ### Installation
-```bash
-cd client
-npm install
+
+1. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+
+2. **Configure environment variables**:
+   Create a `.env.local` file in the client directory:
+   ```env
+   # Contentstack Configuration
+   NEXT_PUBLIC_CONTENTSTACK_API_KEY=your_contentstack_api_key
+   NEXT_PUBLIC_CONTENTSTACK_DELIVERY_TOKEN=your_contentstack_delivery_token
+   NEXT_PUBLIC_CONTENTSTACK_PREVIEW_TOKEN=your_contentstack_preview_token
+   NEXT_PUBLIC_CONTENTSTACK_MANAGEMENT_TOKEN=your_contentstack_management_token
+   NEXT_PUBLIC_CONTENTSTACK_ENVIRONMENT=development
+   NEXT_PUBLIC_CONTENTSTACK_BRANCH=main
+   
+   # API Configuration
+   NEXT_PUBLIC_API_BASE=http://localhost:3001
+   ```
+
+3. **Start the development server**:
+   ```bash
+   npm run dev
+   ```
+
+4. **Open your browser**:
+   Navigate to `http://localhost:3000`
+
+## Usage
+
+### Dashboard
+- View overview of all content types and entries
+- Monitor recent changes and AI suggestions
+- Quick access to common operations
+
+### Content Types
+- Browse all available content types
+- View entry counts and last updated times
+- Select entries for find/replace operations
+
+### Smart Find & Replace
+1. **Select Content Type**: Choose the content type you want to work with
+2. **Select Entries**: Pick specific entries or work with all entries
+3. **Enter Find Text**: Specify what you want to find
+4. **Get AI Suggestions**: Review AI-generated replacement suggestions
+5. **Preview Changes**: See exactly what will be changed before applying
+6. **Apply Changes**: Execute the replacement with confidence
+
+### Bulk Operations
+- Perform find/replace operations on multiple entries
+- Monitor job progress in real-time
+- Support for dry-run mode for safe testing
+
+## Architecture
+
+### Components
+- **ContentstackApp**: Main application component with routing
+- **ContentstackHeader**: Top navigation and status indicators
+- **ContentstackSidebar**: Left navigation and content type listing
+- **ContentstackDashboard**: Overview and quick actions
+- **ContentTypesView**: Content type and entry management
+- **SmartReplaceInterface**: AI-powered find and replace
+- **BulkOperationsInterface**: Multi-entry operations
+
+### Services
+- **Enhanced API Client**: Communicates with your server endpoints
+- **Contentstack Service**: Direct integration with Contentstack SDK
+- **Real-time Sync**: Handles live updates and synchronization
+- **Configuration**: Centralized app configuration
+
+### Key Features
+- **TypeScript**: Full type safety throughout the application
+- **Tailwind CSS**: Modern, responsive styling
+- **Radix UI**: Accessible component primitives
+- **React Query**: Efficient data fetching and caching
+- **Real-time Updates**: WebSocket-like polling for live updates
+
+## API Integration
+
+The client integrates with your server's REST API endpoints:
+
+- `GET /health` - Health check
+- `GET /api/replace/:contentType` - List entries
+- `POST /api/replace/preview` - Preview changes
+- `PUT /api/replace/apply` - Apply changes
+- `POST /api/replace/bulk-preview` - Bulk preview
+- `PUT /api/replace/bulk-apply` - Bulk apply
+- `GET /api/replace/job/:jobId` - Job status
+- `POST /api/replace/suggest` - AI suggestions
+
+## Configuration
+
+### Environment Variables
+All configuration is handled through environment variables. See the `.env.local.example` file for all available options.
+
+### Feature Flags
+Enable/disable features through the configuration:
+- `enableAI`: AI-powered suggestions
+- `enableBulkOperations`: Bulk operations interface
+- `enableRealTimeSync`: Real-time content updates
+- `enableLivePreview`: Contentstack Live Preview integration
+
+## Development
+
+### Project Structure
+```
+src/
+├── app/                 # Next.js app directory
+├── components/          # React components
+│   ├── layout/         # Layout components
+│   ├── dashboard/      # Dashboard components
+│   ├── content-types/  # Content type management
+│   ├── smart-replace/  # Find/replace interface
+│   └── bulk-operations/ # Bulk operations
+├── lib/                # Utilities and services
+│   ├── api.ts         # API client
+│   ├── contentstack.ts # Contentstack integration
+│   ├── realtime-sync.ts # Real-time updates
+│   └── config.ts      # Configuration
+├── hooks/              # Custom React hooks
+└── types/              # TypeScript type definitions
 ```
 
-### Development
-```bash
-npm run dev
-```
+### Available Scripts
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run start` - Start production server
+- `npm run lint` - Run ESLint
 
-### Production Build
-```bash
-npm run build
-npm start
-```
+## Contributing
 
-## 🔧 Development Guidelines
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
 
-### Component Structure
-```typescript
-interface ComponentProps {
-  // Props interface
-}
+## License
 
-export const Component: React.FC<ComponentProps> = ({
-  // Destructured props
-}) => {
-  // Component logic
-  return (
-    // JSX
-  );
-};
-```
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-### State Management
-- Use custom hooks for complex state logic
-- Keep components focused on presentation
-- Separate business logic from UI components
+## Support
 
-### Styling
-- Use Tailwind CSS classes
-- Follow Contentstack design patterns
-- Maintain consistent spacing and colors
+For support and questions:
+- Check the documentation
+- Review the API integration guide
+- Open an issue on GitHub
 
-## 📱 Responsive Design
+---
 
-- **Mobile**: Stacked layout, touch-friendly controls
-- **Tablet**: Optimized grid layouts
-- **Desktop**: Full feature set with side-by-side views
-
-## 🎯 Judge-Friendly Features
-
-1. **Clear Code Organization**: Easy to navigate and understand
-2. **Type Safety**: Full TypeScript implementation
-3. **Component Reusability**: Modular architecture
-4. **Professional UI**: Enterprise-grade appearance
-5. **User Control**: Verify-before-replace workflow
-6. **Audit Trail**: Complete operation history
-
-## 🔍 Code Quality
-
-- **TypeScript**: Full type safety
-- **ESLint**: Code quality enforcement
-- **Prettier**: Consistent code formatting
-- **Component Tests**: Unit test coverage
-- **Accessibility**: WCAG compliance
-
-This structure makes it easy for judges to:
-- Understand the application architecture
-- Review individual components
-- See the separation of concerns
-- Evaluate code quality and organization
-- Understand the user workflow
+Built with ❤️ for Contentstack CMS integration

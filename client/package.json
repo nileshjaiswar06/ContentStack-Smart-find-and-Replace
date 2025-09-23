@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@contentstack/delivery-sdk": "^4.9.0",
+    "@contentstack/live-preview-utils": "^4.0.2",
+    "@contentstack/management": "^1.25.0",
     "@headlessui/react": "^2.2.8",
     "@heroicons/react": "^2.2.0",
     "@radix-ui/react-checkbox": "^1.3.3",
