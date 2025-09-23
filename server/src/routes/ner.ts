@@ -1,6 +1,6 @@
 import { Router } from "express";
 import expressRateLimit, { ipKeyGenerator }  from "express-rate-limit";
-import { extractEntities, extractEntitiesBatch } from "../services/nerProxy.js";
+import { extractEntities, extractEntitiesBatch, checkNerHealth } from "../services/nerProxy.js";
 import { extractNamedEntitiesFromText, extractEntitiesWithCanonicalMapping } from "../services/nerService.js";
 import { logger } from "../utils/logger.js";
 
@@ -31,7 +31,7 @@ router.use(nerRateLimiter);
 router.post("/", async (req, res, next) => {
   const startTime = Date.now();
   try {
-    const { text } = req.body;
+    const { text, model = 'en_core_web_trf', min_confidence = 0.7 } = req.body;
     
     if (!text || typeof text !== 'string') {
       return res.status(400).json({ 
@@ -69,43 +69,51 @@ router.post("/", async (req, res, next) => {
       usedFallback = true;
     } else {
       try {
+        // Try spacy-service first
         const requestId = (req as any).requestId;
-        result = await extractEntitiesWithCanonicalMapping(text, requestId);
-        // Convert to expected format for backwards compatibility
-        const compatibleResult = {
-          entities: result.entities.map(e => ({
-            text: e.text,
-            label: e.originalLabel || e.type.toUpperCase(),
-            start: 0, // Position info lost in canonical mapping
-            end: e.text.length,
-            confidence: e.confidence || 0.8,
-            canonical_type: e.type,
-            source: e.source
-          })),
-          model_used: result.model_used,
-          processing_time_ms: result.processing_time_ms,
-          text_length: result.text_length,
-          entity_count: result.entity_count
-        };
-        result = compatibleResult;
-        logger.info(`Enhanced NER processed text (${text.length} chars) in ${result.processing_time_ms}ms using ${result.model_used}`);
-      } catch (error) {
-        logger.warn(`Enhanced NER failed, using basic fallback: ${error}`);
-        result = { 
-          entities: extractNamedEntitiesFromText(text).map(e => ({
-            text: e.text,
-            label: e.type.toUpperCase(),
-            start: 0,
-            end: e.text.length,
-            confidence: 0.8
-          })),
-          model_used: "compromise_fallback",
-          processing_time_ms: Date.now() - startTime,
-          text_length: text.length,
-          entity_count: 0,
-          fallback: true
-        };
-        usedFallback = true;
+        result = await extractEntities(text, model, min_confidence, requestId);
+        logger.info(`Spacy-service processed text (${text.length} chars) in ${result.processing_time_ms}ms using ${result.model_used}`);
+      } catch (spacyError) {
+        logger.warn(`Spacy-service failed, trying enhanced NER: ${spacyError}`);
+        try {
+          // Fallback to enhanced NER service
+          const requestId = (req as any).requestId;
+          const enhancedResult = await extractEntitiesWithCanonicalMapping(text, requestId);
+          // Convert to expected format for backwards compatibility
+          result = {
+            entities: enhancedResult.entities.map(e => ({
+              text: e.text,
+              label: e.originalLabel || e.type.toUpperCase(),
+              start: 0, // Position info lost in canonical mapping
+              end: e.text.length,
+              confidence: e.confidence || 0.8,
+              canonical_type: e.type,
+              source: e.source
+            })),
+            model_used: enhancedResult.model_used,
+            processing_time_ms: enhancedResult.processing_time_ms,
+            text_length: enhancedResult.text_length,
+            entity_count: enhancedResult.entity_count
+          };
+          logger.info(`Enhanced NER processed text (${text.length} chars) in ${result.processing_time_ms}ms using ${result.model_used}`);
+        } catch (enhancedError) {
+          logger.warn(`Enhanced NER failed, using basic fallback: ${enhancedError}`);
+          result = { 
+            entities: extractNamedEntitiesFromText(text).map(e => ({
+              text: e.text,
+              label: e.type.toUpperCase(),
+              start: 0,
+              end: e.text.length,
+              confidence: 0.8
+            })),
+            model_used: "compromise_fallback",
+            processing_time_ms: Date.now() - startTime,
+            text_length: text.length,
+            entity_count: 0,
+            fallback: true
+          };
+          usedFallback = true;
+        }
       }
     }
 
@@ -124,7 +132,7 @@ router.post("/", async (req, res, next) => {
 router.post("/batch", async (req, res, next) => {
   const startTime = Date.now();
   try {
-    const { texts } = req.body;
+    const { texts, model = 'en_core_web_trf', min_confidence = 0.7 } = req.body;
     
     if (!Array.isArray(texts)) {
       return res.status(400).json({ 
@@ -171,10 +179,11 @@ router.post("/batch", async (req, res, next) => {
       usedFallback = true;
     } else {
       try {
-        result = await extractEntitiesBatch(texts);
-        logger.info(`Batch NER processed ${texts.length} texts in ${Date.now() - startTime}ms`);
-      } catch (error) {
-        logger.warn(`spaCy batch service failed, using fallback: ${error}`);
+        // Try spacy-service first
+        result = await extractEntitiesBatch(texts, model, min_confidence);
+        logger.info(`Spacy-service batch processed ${texts.length} texts in ${Date.now() - startTime}ms`);
+      } catch (spacyError) {
+        logger.warn(`Spacy-service batch failed, using fallback: ${spacyError}`);
         result = {
           results: texts.map(text => ({
             entities: extractNamedEntitiesFromText(text).map(e => ({
@@ -233,12 +242,19 @@ router.get("/health", async (req, res) => {
       return;
     }
 
-    // Test spaCy service with simple text
-    await extractEntities("health check");
-    healthCheck.checks.spacy_service.status = "ok";
-    healthCheck.checks.spacy_service.latency_ms = Date.now() - startTime;
+    // Test spacy-service health
+    const spacyHealth = await checkNerHealth();
+    if (spacyHealth.healthy) {
+      healthCheck.checks.spacy_service.status = "ok";
+      healthCheck.checks.spacy_service.latency_ms = spacyHealth.latency || 0;
+      healthCheck.checks.spacy_service.details = spacyHealth.details;
+    } else {
+      healthCheck.status = "degraded";
+      healthCheck.checks.spacy_service.status = "error";
+      healthCheck.checks.spacy_service.error = spacyHealth.error;
+    }
     
-    logger.debug(`NER health check passed in ${healthCheck.checks.spacy_service.latency_ms}ms`);
+    logger.debug(`NER health check completed: spacy=${healthCheck.checks.spacy_service.status}`);
   } catch (error) {
     healthCheck.status = "degraded";
     healthCheck.checks.spacy_service.status = "error";

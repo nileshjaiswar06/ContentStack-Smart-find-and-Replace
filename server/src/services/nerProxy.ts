@@ -7,7 +7,7 @@ import { randomUUID } from 'crypto';
 // pino's types can sometimes be incompatible with certain TS configs; cast to any to instantiate safely
 const log = (pino as any)({ level: process.env.LOG_LEVEL || 'info', base: { service: 'ner-proxy' } });
 
-const SPACY_URL = process.env.SPACY_SERVICE_URL || 'http://localhost:8000';
+const SPACY_URL = process.env.SPACY_SERVICE_URL || 'http://localhost:8001';
 const SPACY_API_KEY = process.env.SPACY_API_KEY || undefined;
 
 // Circuit breaker state
@@ -65,7 +65,7 @@ axiosRetry(nerAxios, {
 // Use opossum for circuit breaker
 const breakerOptions = {
   timeout: Number(process.env.NER_TIMEOUT_MS || 10000),
-  errorThresholdPercentage: Math.min(100, (Number(process.env.NER_CIRCUIT_BREAKER_FAILURES || 5) /  (Number(process.env.NER_CIRCUIT_BREAKER_FAILURES || 5) + 1)) * 100),
+  errorThresholdPercentage: 50, // Open circuit when 50% of requests fail
   resetTimeout: Number(process.env.NER_CIRCUIT_BREAKER_TIMEOUT || 30000)
 };
 

@@ -1,6 +1,52 @@
 // Removed unused imports
 import { config } from './config';
 
+// spaCy NER Service Interfaces
+export interface SpacyEntity {
+  text: string;
+  label: string;
+  start: number;
+  end: number;
+  confidence: number;
+}
+
+export interface SpacyNERRequest {
+  text: string;
+  model?: string;
+  min_confidence?: number;
+}
+
+export interface SpacyNERResponse {
+  entities: SpacyEntity[];
+  model_used: string;
+  processing_time_ms: number;
+  text_length: number;
+  entity_count: number;
+}
+
+export interface SpacyBatchRequest {
+  texts: string[];
+  model?: string;
+  min_confidence?: number;
+}
+
+export interface SpacyBatchResponse {
+  results: SpacyNERResponse[];
+  total_processing_time_ms: number;
+  batch_size: number;
+}
+
+export interface SpacyHealthResponse {
+  status: string;
+  available_models: string[];
+  timestamp: number;
+}
+
+export interface SpacyLabelsResponse {
+  labels: string[];
+  description: Record<string, string>;
+}
+
 const API_BASE = config.api.baseUrl;
 
 // Enhanced API client that integrates with your server endpoints
@@ -598,28 +644,76 @@ export class EnhancedApiClient {
     });
   }
 
-  // Get NER entities for text
+  // Get NER entities for text using spaCy service
   async getNEREntities(
     text: string,
-    environment = 'development',
-    branch = 'main'
-  ): Promise<unknown> {
-    return this.request(`/api/ner?environment=${environment}&branch=${branch}`, {
+    model = 'en_core_web_trf',
+    minConfidence = 0.7
+  ): Promise<SpacyNERResponse> {
+    const response = await fetch(`${config.spacy.baseUrl}/ner`, {
       method: 'POST',
-      body: JSON.stringify({ text }),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        text,
+        model,
+        min_confidence: minConfidence,
+      }),
     });
+
+    if (!response.ok) {
+      throw new Error(`spaCy NER service error: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
   }
 
-  // Get NER entities for multiple texts
+  // Get NER entities for multiple texts using spaCy service
   async getBatchNEREntities(
     texts: string[],
-    environment = 'development',
-    branch = 'main'
-  ): Promise<unknown> {
-    return this.request(`/api/ner/batch?environment=${environment}&branch=${branch}`, {
+    model = 'en_core_web_trf',
+    minConfidence = 0.7
+  ): Promise<SpacyBatchResponse> {
+    const response = await fetch(`${config.spacy.baseUrl}/ner/batch`, {
       method: 'POST',
-      body: JSON.stringify({ texts }),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        texts,
+        model,
+        min_confidence: minConfidence,
+      }),
     });
+
+    if (!response.ok) {
+      throw new Error(`spaCy NER batch service error: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
+  // Get spaCy service health status
+  async getSpacyHealth(): Promise<SpacyHealthResponse> {
+    const response = await fetch(`${config.spacy.baseUrl}/health`);
+    
+    if (!response.ok) {
+      throw new Error(`spaCy health check failed: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
+  // Get available NER labels from spaCy service
+  async getSpacyLabels(): Promise<SpacyLabelsResponse> {
+    const response = await fetch(`${config.spacy.baseUrl}/labels`);
+    
+    if (!response.ok) {
+      throw new Error(`spaCy labels fetch failed: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
   }
 
   // Poll job status until completion

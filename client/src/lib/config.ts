@@ -19,6 +19,13 @@ export const config = {
     retries: 3,
   },
   
+  // spaCy NER Service Configuration
+  spacy: {
+    baseUrl: process.env.NEXT_PUBLIC_SPACY_BASE_URL || 'http://localhost:8001',
+    timeout: 10000,
+    retries: 2,
+  },
+  
   // UI Configuration
   ui: {
     refreshInterval: 30000, // 30 seconds

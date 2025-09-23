@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,7 +19,7 @@ import {
   Building,
   Sparkles
 } from 'lucide-react';
-import { enhancedApi } from '@/lib/enhanced-api';
+import { enhancedApi, SpacyNERResponse, SpacyBatchResponse, SpacyEntity, SpacyHealthResponse, SpacyLabelsResponse } from '@/lib/enhanced-api';
 
 interface NEREntity {
   text: string;
@@ -41,9 +41,9 @@ interface NERResult {
 
 interface BatchNERResult {
   results: NERResult[];
-  processing_time_ms: number;
+  total_processing_time_ms: number;
   batch_size: number;
-  fallback: boolean;
+  fallback?: boolean;
 }
 
 interface NERInterfaceProps {
@@ -59,6 +59,40 @@ export function NERInterface({ initialText = '', onEntitySelect }: NERInterfaceP
   const [batchResult, setBatchResult] = useState<BatchNERResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Spacy-service specific state
+  const [selectedModel, setSelectedModel] = useState<string>('en_core_web_trf');
+  const [minConfidence, setMinConfidence] = useState<number>(0.7);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [serviceStatus, setServiceStatus] = useState<SpacyHealthResponse | null>(null);
+  const [isSpacyAvailable, setIsSpacyAvailable] = useState<boolean>(false);
+
+  // Check spacy-service status on component mount
+  useEffect(() => {
+    const checkServiceStatus = async () => {
+      try {
+        const health = await enhancedApi.getSpacyHealth();
+        setServiceStatus(health);
+        setIsSpacyAvailable(health.status === 'healthy');
+        
+        if (health.status === 'healthy' && health.available_models) {
+          setAvailableModels(health.available_models);
+          // Set default model to the first available transformer model, or first available
+          const transformerModel = health.available_models.find((m: string) => m.includes('trf'));
+          if (transformerModel) {
+            setSelectedModel(transformerModel);
+          } else if (health.available_models.length > 0) {
+            setSelectedModel(health.available_models[0]);
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to check spacy-service status:', error);
+        setIsSpacyAvailable(false);
+      }
+    };
+
+    checkServiceStatus();
+  }, []);
 
   const getEntityIcon = (label: string) => {
     switch (label.toLowerCase()) {
@@ -103,18 +137,13 @@ export function NERInterface({ initialText = '', onEntitySelect }: NERInterfaceP
     setNerResult(null);
 
     try {
-      console.log('🔍 Analyzing text with NER...');
+      console.log('🔍 Analyzing text with spaCy NER...');
       
-      const response = await enhancedApi.getNEREntities(inputText);
-      console.log('📊 NER Response:', response);
+      const response = await enhancedApi.getNEREntities(inputText, selectedModel, minConfidence);
+      console.log('📊 spaCy NER Response:', response);
 
-      // Handle direct response from server (no wrapping)
-      if (response && typeof response === 'object' && 'entities' in response) {
-        setNerResult(response as NERResult);
-        console.log(`✅ Found ${(response as NERResult).entities?.length || 0} entities`);
-      } else {
-        setError('Invalid response format from NER service');
-      }
+      setNerResult(response);
+      console.log(`✅ Found ${response.entities?.length || 0} entities`);
     } catch (err) {
       console.error('❌ Error getting NER entities:', err);
       setError(err instanceof Error ? err.message : 'Failed to get NER entities');
@@ -135,18 +164,13 @@ export function NERInterface({ initialText = '', onEntitySelect }: NERInterfaceP
     setBatchResult(null);
 
     try {
-      console.log('🔍 Analyzing batch with NER...');
+      console.log('🔍 Analyzing batch with spaCy NER...');
       
-      const response = await enhancedApi.getBatchNEREntities(validTexts);
-      console.log('📊 Batch NER Response:', response);
+      const response = await enhancedApi.getBatchNEREntities(validTexts, selectedModel, minConfidence);
+      console.log('📊 spaCy Batch NER Response:', response);
 
-      // Handle direct response from server (no wrapping)
-      if (response && typeof response === 'object' && 'results' in response) {
-        setBatchResult(response as BatchNERResult);
-        console.log(`✅ Processed ${validTexts.length} texts`);
-      } else {
-        setError('Invalid response format from batch NER service');
-      }
+      setBatchResult(response);
+      console.log(`✅ Processed ${validTexts.length} texts`);
     } catch (err) {
       console.error('❌ Error getting batch NER entities:', err);
       setError(err instanceof Error ? err.message : 'Failed to get batch NER entities');
@@ -235,7 +259,9 @@ export function NERInterface({ initialText = '', onEntitySelect }: NERInterfaceP
         </div>
         <div className="flex items-center space-x-2">
           <Sparkles className="w-4 h-4 text-purple-500" />
-          <span className="text-sm text-gray-500">NER Service Active</span>
+          <span className="text-sm text-gray-500">
+            {isSpacyAvailable ? 'Spacy Service Active' : 'Server NER Active'}
+          </span>
         </div>
       </div>
 
@@ -260,6 +286,53 @@ export function NERInterface({ initialText = '', onEntitySelect }: NERInterfaceP
             </Button>
           </div>
         </div>
+      </Card>
+
+      {/* Model and Settings */}
+      <Card className="p-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Model:
+            </label>
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              disabled={!isSpacyAvailable}
+            >
+              {availableModels.map((model) => (
+                <option key={model} value={model}>
+                  {model} {model.includes('trf') ? '(Transformer)' : '(Statistical)'}
+                </option>
+              ))}
+              {availableModels.length === 0 && (
+                <option value="server_fallback">Server Fallback</option>
+              )}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Min Confidence: {Math.round(minConfidence * 100)}%
+            </label>
+            <input
+              type="range"
+              min="0.1"
+              max="1.0"
+              step="0.1"
+              value={minConfidence}
+              onChange={(e) => setMinConfidence(parseFloat(e.target.value))}
+              className="w-full"
+            />
+          </div>
+        </div>
+        {serviceStatus && (
+          <div className="mt-3 text-xs text-gray-500">
+            Service: {isSpacyAvailable ? 'Spacy Service' : 'Server Fallback'} • 
+            Available Models: {availableModels.length} • 
+            Status: {serviceStatus?.status || 'Unknown'}
+          </div>
+        )}
       </Card>
 
       {/* Single Text Mode */}
@@ -380,10 +453,10 @@ export function NERInterface({ initialText = '', onEntitySelect }: NERInterfaceP
             </h2>
             <div className="flex items-center space-x-2">
               <Badge variant="outline">
-                {batchResult.fallback ? 'Fallback Mode' : 'NER Mode'}
+                spaCy NER Mode
               </Badge>
               <span className="text-sm text-gray-500">
-                {batchResult.processing_time_ms}ms
+                {batchResult.total_processing_time_ms}ms
               </span>
             </div>
           </div>
