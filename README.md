@@ -82,6 +82,11 @@ contentstack/
 │   │   ├── middlewares/   # Express middleware
 │   │   ├── jobs/          # Background job processing
 │   │   └── utils/         # Utility functions
+│   │       ├── deepReplace.ts      # Enhanced deep content replacement
+│   │       ├── tableParser.ts      # Table field processing
+│   │       ├── componentParser.ts  # Component field processing
+│   │       ├── customFieldParser.ts # Custom field processing
+│   │       └── __tests__/          # Unit tests for parsers
 │   └── package.json
 ├── spacy-service/          # Python NLP microservice
 │   ├── app.py             # FastAPI application
@@ -134,8 +139,9 @@ contentstack/
 4. **Access the application**
    - Frontend: http://localhost:3000
    - Backend API: http://localhost:3001
-   - spaCy Service: http://localhost:8000
-   - API Documentation: http://localhost:8000/docs
+   - spaCy Service: http://localhost:8001
+   - API Documentation: http://localhost:8001/docs
+   - Redis: localhost:6379
 
 ### Development Setup
 
@@ -198,6 +204,12 @@ NEXT_PUBLIC_API_BASE=http://localhost:3001
 - **Preview Mode**: See exactly what will change before applying modifications
 - **Bulk Operations**: Process multiple entries simultaneously
 - **Rich Text Support**: Handles complex HTML and markdown content
+- **Enhanced Deep Content Coverage**: 
+  - **Table Support**: Full table field processing with row and cell-level replacements
+  - **Nested Components**: Handles unlimited nesting depth for custom components
+  - **Component Groups**: Processes arrays of components efficiently
+  - **Custom Fields**: Supports all Contentstack field types (JSON, Group, Reference, File, Date, Number, Boolean)
+  - **Real-time Processing**: Works with live Contentstack data, not hardcoded content
 
 ### 2. AI-Powered Suggestions
 - **Multiple Sources**: Suggestions from AI analysis, brand guidelines, and contextual patterns
@@ -223,28 +235,88 @@ NEXT_PUBLIC_API_BASE=http://localhost:3001
 - **Asset Management**: Handles brand assets and media files
 - **Template System**: Pre-defined content templates for consistency
 
+### 6. Enhanced Deep Content Coverage
+- **Table Processing**: 
+  - Full table field support with row and cell-level replacements
+  - Preserves table structure and metadata
+  - Handles complex table layouts and nested content
+- **Nested Components**: 
+  - Unlimited nesting depth for custom components
+  - Component-specific processing logic
+  - Preserves component metadata and relationships
+- **Component Groups**: 
+  - Efficient processing of component arrays
+  - Batch operations on multiple components
+  - Maintains component group integrity
+- **Custom Field Types**: 
+  - JSON fields with deep object traversal
+  - Group fields with nested property processing
+  - Reference fields with metadata updates
+  - File fields with filename and description updates
+  - Date, Number, and Boolean field support
+- **Real-time Data Processing**: 
+  - Works with live Contentstack data
+  - No hardcoded or mock data dependencies
+  - Handles production content structures
+
 ## 🔄 API Endpoints
 
-### Content Management
-- `GET /api/content-types` - List all content types
-- `GET /api/entries/:contentType` - Get entries for a content type
-- `POST /api/replace` - Perform find and replace operations
-- `POST /api/bulk` - Execute bulk operations
+### Core API Routes
+- `GET /health` - Main server health check
+- `GET /api/health` - API health check
 
-### AI & NLP Services
-- `POST /api/ner` - Extract named entities from text
-- `POST /api/ner/batch` - Batch entity extraction
-- `POST /api/suggest` - Get AI-powered suggestions
-- `GET /api/suggest/brandkit` - Get brand-based suggestions
+### Replace Operations (`/api/replace`)
+- `GET /api/replace/` - API documentation
+- `GET /api/replace/snapshots` - List available snapshots
+- `GET /api/replace/:contentTypeUid` - List entries of a content type
+- `POST /api/replace/preview` - Preview changes before applying
+- `PUT /api/replace/apply` - Apply changes to an entry
+- `POST /api/replace/bulk-preview` - Preview changes for multiple entries
+- `PUT /api/replace/bulk-apply` - Apply changes to multiple entries
+- `GET /api/replace/job/:jobId` - Get job status
+- `POST /api/replace/rollback` - Rollback changes using snapshots
 
-### System & Monitoring
-- `GET /health` - Health check endpoint
-- `GET /metrics` - Prometheus metrics
-- `POST /api/webhooks` - Webhook endpoints for external integrations
+### NER (Named Entity Recognition) (`/api/ner`)
+- `POST /api/ner/` - Extract entities from single text
+- `POST /api/ner/batch` - Extract entities from multiple texts
+- `GET /api/ner/health` - NER service health check
+
+### AI Suggestions (`/api/suggest`)
+- `POST /api/suggest/` - Get AI-powered replacement suggestions
+- `POST /api/suggest/batch` - Get suggestions for multiple texts
+- `GET /api/suggest/health` - Suggestions service health check
+- `GET /api/suggest/ai-status` - AI service status
+
+### Brandkit (`/api/brandkit`)
+- `POST /api/brandkit/suggestions` - Get brand-based suggestions
+- `POST /api/brandkit/analyze-tone` - Analyze content tone
+- `POST /api/brandkit/sync` - Sync brandkit data
+- `GET /api/brandkit/providers` - List available providers
+- `GET /api/brandkit/status` - Brandkit service status
+
+### Launch Integration (`/api/launch`)
+- `GET /api/launch/app` - Main Launch app UI (embedded in Contentstack)
+- `GET /api/launch/config` - App configuration and capabilities
+- `POST /api/launch/action` - Handle actions from Launch UI
+
+### Webhooks (`/api/webhooks`)
+- `POST /api/webhooks/entry` - Entry change webhooks
+- `POST /api/webhooks/asset` - Asset change webhooks
+- `POST /api/webhooks/publish` - Publish event webhooks
+- `POST /api/webhooks/automate` - Automate workflow webhooks
+- `GET /api/webhooks/status` - Webhook service status
+
+### Automate Workflows (`/api/automate`)
+- `GET /api/automate/workflows` - List all workflows
+- `GET /api/automate/workflows/:id` - Get specific workflow
+- `POST /api/automate/workflows` - Create new workflow
+- `PUT /api/automate/workflows/:id` - Update workflow
+- `DELETE /api/automate/workflows/:id` - Delete workflow
+- `POST /api/automate/execute` - Execute workflow
 
 ## 🐳 Docker Services
 
-### spaCy Service (Port 8000)
+### spaCy Service (Port 8001)
 - **Purpose**: Named Entity Recognition and text analysis
 - **Technology**: Python + FastAPI + spaCy
 - **Features**: Dual model support, batch processing, custom entities
@@ -253,7 +325,7 @@ NEXT_PUBLIC_API_BASE=http://localhost:3001
 ### Server (Port 3001)
 - **Purpose**: Main API server and business logic
 - **Technology**: Node.js + Express + TypeScript
-- **Features**: Contentstack integration, job queues, real-time sync
+- **Features**: Contentstack integration, job queues, real-time sync, enhanced deep content coverage
 - **Health Check**: `/health` endpoint
 
 ### Client (Port 3000)
@@ -261,6 +333,12 @@ NEXT_PUBLIC_API_BASE=http://localhost:3001
 - **Technology**: Next.js + React + TypeScript
 - **Features**: Real-time UI, responsive design, Contentstack integration
 - **Health Check**: Built-in Next.js health monitoring
+
+### Redis (Port 6379)
+- **Purpose**: Job queue and caching
+- **Technology**: Redis 7-alpine
+- **Features**: Background job processing, session storage
+- **Health Check**: Built-in Redis health monitoring
 
 ## 📊 Monitoring & Observability
 
