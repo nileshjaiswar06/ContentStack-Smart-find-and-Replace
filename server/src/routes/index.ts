@@ -6,6 +6,15 @@ import webhookRoutes from "./webhooks.js";
 
 const router = Router();
 
+// Health check endpoint
+router.get("/health", (req, res) => {
+  res.status(200).json({ 
+    status: "healthy", 
+    timestamp: new Date().toISOString(),
+    service: "smart-find-replace-server"
+  });
+});
+
 router.use("/replace", replaceRoutes);
 router.use("/brandkit", brandkitRoutes);
 router.use("/launch", launchRoutes);

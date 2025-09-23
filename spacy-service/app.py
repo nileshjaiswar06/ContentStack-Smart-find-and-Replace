@@ -42,15 +42,20 @@ def _safe_metric(factory, name, *args, **kwargs):
     """Create a Prometheus metric, or return the existing one if already registered."""
     try:
         return factory(name, *args, **kwargs)
-    except ValueError:
-        # Collector with this name already registered; try to find and return it from the default REGISTRY
-        for collector in REGISTRY._collector_to_names.keys():
-            try:
-                # collector may be an object with _name attribute (Counter/Histogram/Gauge)
-                if getattr(collector, '_name', None) == name:
-                    return collector
-            except Exception:
-                continue
+    except ValueError as e:
+        if "Duplicated timeseries" in str(e):
+            # Collector with this name already registered; try to find and return it from the default REGISTRY
+            for collector in list(REGISTRY._collector_to_names.keys()):
+                try:
+                    # collector may be an object with _name attribute (Counter/Histogram/Gauge)
+                    if hasattr(collector, '_name') and collector._name == name:
+                        logger.info(f"Reusing existing Prometheus metric: {name}")
+                        return collector
+                except Exception:
+                    continue
+            # If we can't find it, create a new registry or clear the old one
+            logger.warning(f"Could not find existing metric {name}, creating new one")
+            return factory(name, *args, **kwargs, registry=None)
         # As a fallback, re-raise the original error
         raise
 

@@ -1,22 +1,25 @@
-FROM node:20-alpine
+FROM node:18-alpine
 
-WORKDIR /usr/src/app
+WORKDIR /app
 
-# Install build dependencies and production deps separately to avoid copying local node_modules
+# Copy package files
 COPY package*.json ./
-RUN npm ci
 
-# Copy source code (after installing deps) - avoids pulling host node_modules into image
+# Install dependencies
+RUN npm ci --only=production
+
+# Copy source code
 COPY . .
 
-# Build TypeScript
-RUN npm run build
-
-# Remove dev dependencies for smaller runtime image
-RUN npm prune --production
+# Create data directory
+RUN mkdir -p data
 
 # Expose port
 EXPOSE 3001
 
-# Ensure check script exists before running. The script logs Redis connectivity and does not error on failure.
-CMD ["/bin/sh", "-c", "[ -f ./scripts/check-redis.js ] && node ./scripts/check-redis.js || echo 'check-redis.js not found, skipping'; node dist/index.js"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:3001/health || exit 1
+
+# Start the application
+CMD ["npm", "start"]
