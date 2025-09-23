@@ -23,7 +23,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { enhancedApi, ContentTypeEntry } from '@/lib/enhanced-api';
-import { contentstackService } from '@/lib/contentstack';
+import { contentstack } from '@/lib/contentstack';
 
 interface ContentType {
   uid: string;
@@ -31,16 +31,17 @@ interface ContentType {
   count: number;
   lastUpdated: string;
   status: 'published' | 'draft' | 'archived';
-  entries: ContentTypeEntry[];
+  entries?: ContentTypeEntry[];
 }
 
 interface ContentTypesViewProps {
+  contentTypes?: ContentType[];
   onEntrySelect: (contentType: string, entry: ContentTypeEntry) => void;
   onRefresh: () => void;
   isRefreshing?: boolean;
 }
 
-export function ContentTypesView({ onEntrySelect, onRefresh, isRefreshing = false }: ContentTypesViewProps) {
+export function ContentTypesView({ contentTypes: propContentTypes, onEntrySelect, onRefresh, isRefreshing = false }: ContentTypesViewProps) {
   const [contentTypes, setContentTypes] = useState<ContentType[]>([]);
   const [selectedContentType, setSelectedContentType] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -48,48 +49,68 @@ export function ContentTypesView({ onEntrySelect, onRefresh, isRefreshing = fals
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Dynamic content types will be fetched from CMS
-
+  // Use prop data if available, otherwise fetch from API
   useEffect(() => {
-    loadContentTypes();
-  }, []);
+    if (propContentTypes && propContentTypes.length > 0) {
+      // Convert prop data to local format with entries loaded
+      const convertedData: ContentType[] = propContentTypes.map(ct => ({
+        ...ct,
+        entries: [] // Will be loaded on demand when expanded
+      }));
+      setContentTypes(convertedData);
+      setLoading(false);
+    } else {
+      loadContentTypes();
+    }
+  }, [propContentTypes]);
 
   const loadContentTypes = async () => {
     setLoading(true);
     setError(null);
     
     try {
+      console.log('🔍 Loading content types for ContentTypesView...');
+      
+      // Get content types from Contentstack using the working approach
+      const contentTypesResult = await contentstack.contentType().find();
+      console.log('📊 Content types result:', contentTypesResult);
+      
+      if (!contentTypesResult.content_types || contentTypesResult.content_types.length === 0) {
+        throw new Error('No content types found');
+      }
+
       const contentTypeData: ContentType[] = [];
-      
-      // Get content types from Contentstack CMS
-      const contentTypes = await contentstackService.getContentTypes();
-      
-      for (let i = 0; i < contentTypes.length; i++) {
-        const contentTypeUid = contentTypes[i];
-        
-        // Add delay to avoid rate limiting
-        if (i > 0) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
+
+      // Process each content type
+      for (const ctRaw of contentTypesResult.content_types) {
+        const ct = ctRaw as { uid: string; title?: string };
+        console.log(`📋 Processing content type: ${ct.uid}`);
         
         try {
-          // Get entries from Contentstack CMS
-          const entries = await contentstackService.getEntries(contentTypeUid);
-          const entryList = entries.entries || [];
+          // Get entry count using server API
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/replace/${ct.uid}?environment=${process.env.NEXT_PUBLIC_CONTENTSTACK_ENVIRONMENT}&branch=${process.env.NEXT_PUBLIC_CONTENTSTACK_BRANCH}`);
+          const apiResult = await response.json();
+          
+          const entryCount = apiResult.ok && apiResult.data ? (apiResult.data.count || 0) : 0;
           
           contentTypeData.push({
-            uid: contentTypeUid,
-            title: contentTypeUid.charAt(0).toUpperCase() + contentTypeUid.slice(1) + 's',
-            count: entryList.length,
-            lastUpdated: entryList[0]?.updated_at || new Date().toISOString(),
+            uid: ct.uid,
+            title: ct.title || ct.uid,
+            count: entryCount,
+            lastUpdated: new Date().toISOString(),
             status: 'published',
-            entries: entryList
+            entries: [] // Will be loaded on demand
           });
+          
+          console.log(`✅ ${ct.uid}: ${entryCount} entries`);
+          
+          // Add delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 500));
         } catch (err) {
-          console.warn(`Failed to load ${contentTypeUid}:`, err);
+          console.warn(`⚠️ Failed to load ${ct.uid}:`, err);
           contentTypeData.push({
-            uid: contentTypeUid,
-            title: contentTypeUid.charAt(0).toUpperCase() + contentTypeUid.slice(1) + 's',
+            uid: ct.uid,
+            title: ct.title || ct.uid,
             count: 0,
             lastUpdated: new Date().toISOString(),
             status: 'draft',
@@ -139,8 +160,37 @@ export function ContentTypesView({ onEntrySelect, onRefresh, isRefreshing = fals
     return matchesSearch && matchesFilter;
   });
 
-  const handleContentTypeClick = (contentType: ContentType) => {
+  const loadEntriesForContentType = async (contentTypeUid: string) => {
+    try {
+      console.log(`🔍 Loading entries for ${contentTypeUid}...`);
+      
+      // Get entries using the contentstack SDK directly
+      const entriesResult = await contentstack.contentType(contentTypeUid).entry().find();
+      console.log(`📊 Entries result for ${contentTypeUid}:`, entriesResult);
+      
+      const entries = entriesResult.entries || [];
+      
+      // Update the content type with loaded entries
+      setContentTypes(prev => prev.map(ct => 
+        ct.uid === contentTypeUid 
+          ? { ...ct, entries: entries as ContentTypeEntry[] }
+          : ct
+      ));
+      
+      console.log(`✅ Loaded ${entries.length} entries for ${contentTypeUid}`);
+    } catch (err) {
+      console.warn(`⚠️ Failed to load entries for ${contentTypeUid}:`, err);
+    }
+  };
+
+  const handleContentTypeClick = async (contentType: ContentType) => {
+    const isExpanding = selectedContentType !== contentType.uid;
     setSelectedContentType(selectedContentType === contentType.uid ? null : contentType.uid);
+    
+    // Load entries if expanding and entries haven't been loaded yet
+    if (isExpanding && (!contentType.entries || contentType.entries.length === 0) && contentType.count > 0) {
+      await loadEntriesForContentType(contentType.uid);
+    }
   };
 
   if (loading) {
@@ -273,9 +323,9 @@ export function ContentTypesView({ onEntrySelect, onRefresh, isRefreshing = fals
               {isExpanded && (
                 <div className="border-t border-gray-200 bg-gray-50">
                   <div className="p-4">
-                    <h4 className="text-sm font-medium text-gray-900 mb-3">Entries ({contentType.entries.length})</h4>
+                    <h4 className="text-sm font-medium text-gray-900 mb-3">Entries ({contentType.entries?.length || 0})</h4>
                     <div className="space-y-2">
-                      {contentType.entries.length === 0 ? (
+                      {!contentType.entries || contentType.entries.length === 0 ? (
                         <div className="text-center py-8 text-gray-500">
                           <Database className="w-8 h-8 mx-auto mb-2 text-gray-400" />
                           <p>No entries found</p>

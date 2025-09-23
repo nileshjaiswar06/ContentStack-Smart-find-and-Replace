@@ -228,6 +228,7 @@ export function ContentstackApp() {
       case 'content-types':
         return (
           <ContentTypesView
+            contentTypes={contentTypes}
             onEntrySelect={handleEntrySelect}
             onRefresh={loadData}
             isRefreshing={isRefreshing}
